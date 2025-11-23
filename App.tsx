@@ -240,9 +240,15 @@ export default function App() {
         const blobId = params.get('blob');
         if (blobId) {
             fetch(`https://jsonblob.com/api/jsonBlob/${blobId}`)
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error("Blob not found");
+                    return res.json();
+                })
                 .then(data => loadData(data, isTransparent))
-                .catch(err => console.error("Failed to load blob:", err));
+                .catch(err => {
+                    console.error("Failed to load blob:", err);
+                    // Silent fail for now, maybe show a toast in future
+                });
             return; // Skip other methods
         }
 

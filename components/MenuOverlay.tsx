@@ -141,7 +141,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
   const [shareTransparent, setShareTransparent] = useState(false);
   const [shareGyro, setShareGyro] = useState(useGyroscope);
   
-  const [cloudStatus, setCloudStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [cloudStatus, setCloudStatus] = useState<'idle' | 'uploading' | 'success' | 'error-fallback'>('idle');
   const [cloudLink, setCloudLink] = useState('');
   
   const menuRef = useRef<HTMLDivElement>(null);
@@ -183,32 +183,54 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
   const generateCloudLink = async () => {
       setCloudStatus('uploading');
       
+      const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
+      const rawData = getEncodedState();
+      
+      // FALLBACK: Client-side compression if cloud fetch fails
+      const generateFallbackLink = () => {
+          try {
+            const compressed = LZString.compressToEncodedURIComponent(rawData);
+            const url = new URL(origin + window.location.pathname);
+            url.searchParams.set('mode', 'embed');
+            url.searchParams.set('encoded', compressed);
+            url.searchParams.set('strength', parallaxStrength.toString());
+            url.searchParams.set('inverted', parallaxInverted.toString());
+            url.searchParams.set('gyro', shareGyro.toString());
+            if (shareTransparent) {
+                url.searchParams.set('bg', 'transparent');
+            } else {
+                url.searchParams.set('bg', backgroundColor.replace('#', ''));
+            }
+            setCloudLink(url.toString());
+            setCloudStatus('error-fallback');
+          } catch (err) {
+            console.error("Compression failed", err);
+          }
+      };
+
       try {
-          // Get the raw data string (minified JSON)
-          const rawData = getEncodedState();
-          
-          // Post to JSONBlob (Anonymous storage)
+          // Attempt JSONBlob Cloud Upload
+          // Added referrerPolicy and credentials omit to fix CORS NetworkErrors in strict environments
           const response = await fetch('https://jsonblob.com/api/jsonBlob', {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
                   'Accept': 'application/json'
               },
+              mode: 'cors',
+              credentials: 'omit',
+              referrerPolicy: 'no-referrer',
               body: rawData
           });
 
-          if (!response.ok) throw new Error("Upload failed");
+          if (!response.ok) throw new Error(`Cloud Error: ${response.statusText}`);
           
-          // Get ID from Location Header
           const locationHeader = response.headers.get('Location');
-          if (!locationHeader) throw new Error("No location header");
+          if (!locationHeader) throw new Error("No location header from cloud");
           
           const blobId = locationHeader.split('/').pop();
           
-          // Construct URL
-          const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
           const url = new URL(origin + window.location.pathname);
-          
           url.searchParams.set('mode', 'embed');
           url.searchParams.set('blob', blobId || '');
           url.searchParams.set('strength', parallaxStrength.toString());
@@ -225,8 +247,8 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
           setCloudStatus('success');
 
       } catch (e) {
-          console.error(e);
-          setCloudStatus('error');
+          console.warn("Cloud upload unavailable, switching to offline link.", e);
+          generateFallbackLink();
       }
   };
 
@@ -506,6 +528,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     onClick={() => {
                         setShowShare(!showShare);
                         setCloudStatus('idle');
+                        setCloudLink('');
                     }}
                     className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all group ${
                         showShare 
@@ -566,14 +589,17 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                                     : 'bg-[var(--active-color)] text-white hover:opacity-90 shadow-md hover:shadow-lg'
                                 }`}
                              >
-                                 {cloudStatus === 'uploading' ? 'Generating Link...' : 'Generate Cloud Link (Automatic)'}
+                                 {cloudStatus === 'uploading' ? 'Generating Link...' : 'Generate Automatic Link'}
                              </button>
-                             {cloudStatus === 'error' && (
-                                 <p className="text-[10px] text-red-500 text-center">Failed to upload. Please try again.</p>
+                             {cloudStatus === 'error-fallback' && (
+                                 <div className="bg-blue-50 text-blue-700 p-2 rounded text-[10px] text-center border border-blue-100">
+                                     <strong>Offline Link Generated</strong><br/>
+                                     Cloud upload unavailable. Using compressed data link.
+                                 </div>
                              )}
                          </div>
 
-                        {cloudLink && cloudStatus === 'success' && (
+                        {cloudLink && (cloudStatus === 'success' || cloudStatus === 'error-fallback') && (
                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                                 <div className="flex justify-between items-end">
                                     <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Copy Embed Code</span>
@@ -591,7 +617,9 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                                     value={`<iframe src="${cloudLink}" width="100%" height="600" style="border:none; border-radius:12px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`}
                                 />
                                 <p className="text-[9px] text-[var(--secondary-text)] text-center">
-                                    Hosted via JSONBlob. No setup required.
+                                    {cloudStatus === 'success' 
+                                        ? "Hosted via JSONBlob. No setup required." 
+                                        : "Offline Mode. Works everywhere but URL is long."}
                                 </p>
                             </div>
                         )}
