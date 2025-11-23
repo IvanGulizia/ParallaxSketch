@@ -1,9 +1,12 @@
 
+
 import React from 'react';
 import { 
   Play, Pause, Droplet, Brush, Eraser, MousePointer2, 
   Layers, MoveHorizontal, Undo2, Redo2, Trash2, XCircle,
-  Menu, Download, Upload, PaintBucket, Shuffle, Share2, Link
+  Menu, Download, Upload, PaintBucket, Shuffle, Share2, Link,
+  Link2, Link2Off, Square, Zap, Battery, RotateCcw, Dices,
+  LayoutTemplate, X
 } from 'lucide-react';
 
 export const Icons = {
@@ -25,5 +28,14 @@ export const Icons = {
   Fill: PaintBucket,
   Shuffle,
   Share: Share2,
-  Link
+  Link,
+  LinkOn: Link2,
+  LinkOff: Link2Off,
+  Square,
+  Eco: Zap,
+  Battery,
+  Reset: RotateCcw,
+  Random: Dices,
+  Aspect: LayoutTemplate,
+  X
 };

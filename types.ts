@@ -1,4 +1,5 @@
 
+
 export enum ToolType {
   BRUSH = 'BRUSH',
   ERASER = 'ERASER',
@@ -15,6 +16,8 @@ export interface Point {
   y: number;
 }
 
+export type BlendMode = 'normal' | 'multiply' | 'overlay' | 'difference';
+
 export interface Stroke {
   id: string;
   points: Point[];
@@ -24,13 +27,33 @@ export interface Stroke {
   tool: ToolType; 
   layerId: number;
   isEraser?: boolean;
-  blendMode?: 'normal' | 'multiply';
-  fillBlendMode?: 'normal' | 'multiply';
+  blendMode?: BlendMode;
+  fillBlendMode?: BlendMode;
+  isStrokeEnabled?: boolean; // Kept for compatibility, but logic will enforce true mostly
 }
 
 export interface SpringConfig {
-  stiffness: number; // 0.01 to 0.5
-  damping: number;   // 0.5 to 0.99
+  stiffness: number; // 0.01 to 1.0
+  damping: number;   // 0.1 to 0.99
+}
+
+export interface UITheme {
+  activeColor: string;
+  toolBg: string; // The toolbar bubbles
+  menuBg: string; // The settings menu background
+  appBg: string; // The main backdrop
+  buttonBg: string; // New: Standard button background
+  textColor: string;
+  secondaryText: string; // Less prominent text
+  borderColor: string;
+  buttonBorder: string;
+  iconColor: string;
+  sliderTrack: string; // The empty part of the track
+  sliderFilled: string; // New: The filled part of the track
+  sliderHandle: string; // The knob
+  disabledColor: string;
+  scrollbarThumb: string;
+  scrollbarTrack: string; 
 }
 
 export interface AppState {
@@ -39,16 +62,36 @@ export interface AppState {
   brushSize: number;
   activeColorSlot: number; // 0 to 4
   activeSecondaryColorSlot: number; // 0 to 4 (Fill color)
-  activeBlendMode: 'normal' | 'multiply';
-  activeFillBlendMode: 'normal' | 'multiply';
+  activeBlendMode: BlendMode;
+  activeFillBlendMode: BlendMode;
   isFillEnabled: boolean;
+  isColorSynced: boolean; // New: If true, fill color follows stroke color
+  isStrokeEnabled: boolean; 
   palette: string[]; // Array of 5 hex codes
   parallaxStrength: number;
+  parallaxInverted: boolean; 
   springConfig: SpringConfig;
   focalLayerIndex: number; // The layer that stays still (0-4)
   isPlaying: boolean;
+  useGyroscope: boolean; // New: Use device orientation for parallax
+  isLowPowerMode: boolean; // New: Disables springs and loops for battery saving
   eraserMode: EraserMode;
   isMenuOpen: boolean;
   canvasBackgroundColor: string;
+  canvasWidth: number; // Percentage 20-100
+  aspectRatio: number | null; // null = responsive/custom width, 1 = square 1:1
+  
+  // Grid Settings
+  isGridEnabled: boolean;
+  isSnappingEnabled: boolean;
+  gridSize: number; // 10 to 100
+
+  // Visual Settings
+  isOnionSkinEnabled: boolean; // New: Depth based opacity
+
+  globalLayerBlendMode: BlendMode; 
+  layerBlendModes: Record<number, BlendMode>; // Per-layer blend mode (CSS mix-blend-mode)
+  uiTheme: UITheme; 
   isEmbedMode: boolean;
+  isTransparentEmbed: boolean; // New: for transparent background embeds
 }

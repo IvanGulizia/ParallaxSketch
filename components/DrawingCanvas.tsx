@@ -1,6 +1,11 @@
 
+
+
+
+
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { ToolType, Point, Stroke, EraserMode, SpringConfig } from '../types';
+import { ToolType, Point, Stroke, EraserMode, SpringConfig, BlendMode } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DrawingCanvasProps {
@@ -9,16 +14,26 @@ interface DrawingCanvasProps {
   brushSize: number;
   activeColorSlot: number;
   activeSecondaryColorSlot: number;
-  activeBlendMode: 'normal' | 'multiply';
-  activeFillBlendMode: 'normal' | 'multiply';
+  activeBlendMode: BlendMode;
+  activeFillBlendMode: BlendMode;
   isFillEnabled: boolean;
+  isStrokeEnabled: boolean;
   palette: string[];
   parallaxStrength: number;
+  parallaxInverted: boolean;
   springConfig: SpringConfig;
   focalLayerIndex: number;
   isPlaying: boolean;
   eraserMode: EraserMode;
   backgroundColor: string;
+  globalLayerBlendMode: BlendMode;
+  layerBlendModes: Record<number, BlendMode>;
+  isGridEnabled: boolean;
+  isSnappingEnabled: boolean;
+  gridSize: number;
+  useGyroscope: boolean;
+  isLowPowerMode: boolean;
+  isOnionSkinEnabled: boolean; // New prop
   onStrokesChange: (strokes: Stroke[]) => void;
   strokes: Stroke[];
 }
@@ -35,13 +50,23 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   activeBlendMode,
   activeFillBlendMode,
   isFillEnabled,
+  isStrokeEnabled,
   palette,
   parallaxStrength,
+  parallaxInverted,
   springConfig,
   focalLayerIndex,
   isPlaying,
   eraserMode,
   backgroundColor,
+  globalLayerBlendMode,
+  layerBlendModes,
+  isGridEnabled,
+  isSnappingEnabled,
+  gridSize,
+  useGyroscope,
+  isLowPowerMode,
+  isOnionSkinEnabled,
   onStrokesChange,
   strokes
 }) => {
@@ -64,6 +89,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const isDraggingSelection = useRef(false);
   const dragStartPos = useRef<Point>({ x: 0, y: 0 });
 
+  // Version counter to trigger CanvasLayer updates without a loop in Low Power Mode
+  const [renderVersion, setRenderVersion] = useState(0);
+
   // Init Offscreens
   useEffect(() => {
     offscreenCanvases.current = offscreenCanvases.current.map((_, i) => {
@@ -85,14 +113,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   }, []);
 
   // Helpers
-  // We normalize against the VIEWABLE area.
   const normalizePoint = (x: number, y: number, width: number, height: number): Point => ({
       x: x / width,
       y: y / height
   });
 
-  // When denormalizing to draw on the offscreen canvas, we add the OVERSCAN_MARGIN offset
-  // so (0,0) in normalized coords lands at (Margin, Margin) on the canvas.
   const denormalizePoint = (p: Point, width: number, height: number): Point => ({
       x: (p.x * width) + OVERSCAN_MARGIN,
       y: (p.y * height) + OVERSCAN_MARGIN
@@ -120,79 +145,144 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     layerStrokes.forEach(stroke => {
         if (stroke.points.length < 2) return;
 
-        ctx.beginPath();
         const start = denormalizePoint(stroke.points[0], dimensions.width, dimensions.height);
-        ctx.moveTo(start.x, start.y);
-
-        for (let i = 1; i < stroke.points.length; i++) {
-            const p = denormalizePoint(stroke.points[i], dimensions.width, dimensions.height);
-            ctx.lineTo(p.x, p.y);
-        }
-
+        
         // 1. Fill Pass
         if (stroke.fillColorSlot !== undefined && stroke.fillColorSlot !== -1) {
-             ctx.closePath(); 
-             ctx.fillStyle = palette[stroke.fillColorSlot] || 'transparent';
-             ctx.globalCompositeOperation = stroke.fillBlendMode === 'multiply' ? 'multiply' : 'source-over';
-             ctx.fill();
-             
              ctx.beginPath();
              ctx.moveTo(start.x, start.y);
              for (let i = 1; i < stroke.points.length; i++) {
                 const p = denormalizePoint(stroke.points[i], dimensions.width, dimensions.height);
                 ctx.lineTo(p.x, p.y);
              }
+             ctx.closePath(); 
+             ctx.fillStyle = palette[stroke.fillColorSlot] || 'transparent';
+             
+             // Map custom blend modes to canvas composite operations
+             let compositeOp: GlobalCompositeOperation = 'source-over';
+             if (stroke.fillBlendMode === 'multiply') compositeOp = 'multiply';
+             else if (stroke.fillBlendMode === 'overlay') compositeOp = 'overlay';
+             else if (stroke.fillBlendMode === 'difference') compositeOp = 'difference';
+
+             ctx.globalCompositeOperation = compositeOp;
+             ctx.fill();
         }
 
-        // 2. Stroke Pass
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = stroke.size;
-        
-        if (stroke.tool === ToolType.ERASER) {
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.stroke();
-        } else {
-            ctx.globalCompositeOperation = stroke.blendMode === 'multiply' ? 'multiply' : 'source-over';
-            ctx.strokeStyle = palette[stroke.colorSlot] || '#000000';
-            
-            if (stroke.id === selectedStrokeId) {
-                 ctx.shadowColor = '#000000';
-                 ctx.shadowBlur = 10;
-            } else {
-                ctx.shadowColor = 'transparent';
-                ctx.shadowBlur = 0;
+        // 2. Stroke Pass (Only if enabled or if it's eraser)
+        if (stroke.isStrokeEnabled !== false || stroke.tool === ToolType.ERASER) {
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            for (let i = 1; i < stroke.points.length; i++) {
+                const p = denormalizePoint(stroke.points[i], dimensions.width, dimensions.height);
+                ctx.lineTo(p.x, p.y);
             }
-            ctx.stroke();
+
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = stroke.size;
+            
+            if (stroke.tool === ToolType.ERASER) {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.stroke();
+            } else {
+                let compositeOp: GlobalCompositeOperation = 'source-over';
+                if (stroke.blendMode === 'multiply') compositeOp = 'multiply';
+                else if (stroke.blendMode === 'overlay') compositeOp = 'overlay';
+                else if (stroke.blendMode === 'difference') compositeOp = 'difference';
+
+                ctx.globalCompositeOperation = compositeOp;
+                ctx.strokeStyle = palette[stroke.colorSlot] || '#000000';
+                
+                if (stroke.id === selectedStrokeId) {
+                    ctx.shadowColor = '#000000';
+                    ctx.shadowBlur = 10;
+                } else {
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                }
+                ctx.stroke();
+            }
         }
         
         ctx.globalCompositeOperation = 'source-over';
         ctx.shadowBlur = 0;
     });
-  }, [strokes, selectedStrokeId, dimensions, palette]);
+    
+    // In low power mode, we need to notify CanvasLayer that a render happened
+    if (isLowPowerMode) {
+        setRenderVersion(v => v + 1);
+    }
+  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode]);
 
   useEffect(() => {
     [0, 1, 2, 3, 4].forEach(renderLayer);
   }, [strokes, renderLayer, selectedStrokeId, dimensions, palette]);
 
+  // Apply Transform Helper
+  const applyParallaxTransforms = (offsetX: number, offsetY: number) => {
+    const maxPx = (parallaxStrength / 100) * OVERSCAN_MARGIN;
+    const direction = parallaxInverted ? -1 : 1;
+    
+    const layers = containerRef.current?.querySelectorAll('.layer-canvas');
+    layers?.forEach((layer, i) => {
+        const relativeDepth = (i - focalLayerIndex) * 0.5;
+        const x = -offsetX * maxPx * relativeDepth * direction;
+        const y = -offsetY * maxPx * relativeDepth * direction;
+        (layer as HTMLElement).style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    });
+  };
 
   // --- Physics Loop (Spring System) ---
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      // If using gyroscope and playing, ignore mouse for parallax
+      if (isPlaying && useGyroscope) return; 
+
       if (!containerRef.current) return;
       const { width, height, left, top } = containerRef.current.getBoundingClientRect();
       const x = ((e.clientX - left) / width) * 2 - 1;
       const y = ((e.clientY - top) / height) * 2 - 1;
-      targetOffset.current = { x, y };
+      
+      if (isLowPowerMode) {
+          // Direct application, no springs
+          currentOffset.current = { x, y };
+          applyParallaxTransforms(x, y);
+      } else {
+          targetOffset.current = { x, y };
+      }
     };
+
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+        if (!isPlaying || !useGyroscope) return;
+        
+        let x = (e.gamma || 0) / 45; 
+        let y = (e.beta || 0) / 45;
+        x = Math.max(-1, Math.min(1, x));
+        y = Math.max(-1, Math.min(1, y));
+        
+        if (isLowPowerMode) {
+            currentOffset.current = { x, y };
+            applyParallaxTransforms(x, y);
+        } else {
+            targetOffset.current = { x, y };
+        }
+    }
 
     if (isPlaying) {
       window.addEventListener('mousemove', handleMouseMove);
+      if (useGyroscope) {
+          window.addEventListener('deviceorientation', handleOrientation);
+      }
     } else {
-        targetOffset.current = { x: 0, y: 0 };
+        // Reset or recenter if needed, or just stop
+        if (!isLowPowerMode) targetOffset.current = { x: 0, y: 0 };
     }
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [isPlaying]);
+
+    return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('deviceorientation', handleOrientation);
+    }
+  }, [isPlaying, useGyroscope, isLowPowerMode, parallaxStrength, focalLayerIndex, parallaxInverted]);
 
   const animationLoop = () => {
     // Spring Physics: F = -kx - cv
@@ -208,23 +298,19 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     currentOffset.current.x += velocity.current.x;
     currentOffset.current.y += velocity.current.y;
 
-    const maxPx = (parallaxStrength / 100) * OVERSCAN_MARGIN;
-    const layers = containerRef.current?.querySelectorAll('.layer-canvas');
+    applyParallaxTransforms(currentOffset.current.x, currentOffset.current.y);
     
-    layers?.forEach((layer, i) => {
-        const relativeDepth = (i - focalLayerIndex) * 0.5;
-        const x = -currentOffset.current.x * maxPx * relativeDepth;
-        const y = -currentOffset.current.y * maxPx * relativeDepth;
-        (layer as HTMLElement).style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-    });
-
-    requestRef.current = requestAnimationFrame(animationLoop);
+    if (!isLowPowerMode) {
+        requestRef.current = requestAnimationFrame(animationLoop);
+    }
   };
 
   useEffect(() => {
-    requestRef.current = requestAnimationFrame(animationLoop);
+    if (!isLowPowerMode) {
+        requestRef.current = requestAnimationFrame(animationLoop);
+    }
     return () => cancelAnimationFrame(requestRef.current);
-  }, [parallaxStrength, focalLayerIndex, springConfig]); 
+  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode]); 
 
 
   // --- Interaction ---
@@ -244,11 +330,19 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     // Parallax Correction
     const maxPx = (parallaxStrength / 100) * OVERSCAN_MARGIN;
     const relativeDepth = (activeLayer - focalLayerIndex) * 0.5;
-    const offsetX = -currentOffset.current.x * maxPx * relativeDepth;
-    const offsetY = -currentOffset.current.y * maxPx * relativeDepth;
+    const direction = parallaxInverted ? -1 : 1;
+    const offsetX = -currentOffset.current.x * maxPx * relativeDepth * direction;
+    const offsetY = -currentOffset.current.y * maxPx * relativeDepth * direction;
 
-    const x = (clientX - rect.left) - offsetX;
-    const y = (clientY - rect.top) - offsetY;
+    let x = (clientX - rect.left) - offsetX;
+    let y = (clientY - rect.top) - offsetY;
+    
+    // Snapping Logic
+    if (isGridEnabled && isSnappingEnabled) {
+        const snap = (val: number) => Math.round(val / gridSize) * gridSize;
+        x = snap(x);
+        y = snap(y);
+    }
 
     return normalizePoint(x, y, rect.width, rect.height);
   };
@@ -319,11 +413,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     }
 
     if (!isDrawing.current) return;
+    
+    // Only add point if it's different enough (helps with snapping duplication)
+    const lastPt = currentStrokePoints.current[currentStrokePoints.current.length - 1];
+    if (lastPt.x === pt.x && lastPt.y === pt.y) return;
+
     currentStrokePoints.current.push(pt);
     
     // Live render on active canvas (Primitive preview)
     const ctx = offscreenCanvases.current[activeLayer]?.getContext('2d');
-    if (ctx) {
+    if (ctx && (isStrokeEnabled || activeTool === ToolType.ERASER)) {
         ctx.beginPath();
         const prev = denormalizePoint(currentStrokePoints.current[currentStrokePoints.current.length - 2], dimensions.width, dimensions.height);
         const curr = denormalizePoint(pt, dimensions.width, dimensions.height);
@@ -337,10 +436,21 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         if (activeTool === ToolType.ERASER) {
             ctx.globalCompositeOperation = 'destination-out';
         } else {
-            ctx.globalCompositeOperation = activeBlendMode === 'multiply' ? 'multiply' : 'source-over';
+            let compositeOp: GlobalCompositeOperation = 'source-over';
+            if (activeBlendMode === 'multiply') compositeOp = 'multiply';
+            else if (activeBlendMode === 'overlay') compositeOp = 'overlay';
+            else if (activeBlendMode === 'difference') compositeOp = 'difference';
+            
+            ctx.globalCompositeOperation = compositeOp;
             ctx.strokeStyle = palette[activeColorSlot];
         }
         ctx.stroke();
+
+        // In Low Power Mode, we need to manually trigger the display canvas update during drawing
+        // because we disabled the infinite loop.
+        if (isLowPowerMode) {
+             setRenderVersion(v => v + 1);
+        }
     }
   };
 
@@ -360,17 +470,27 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             layerId: activeLayer,
             isEraser: activeTool === ToolType.ERASER,
             blendMode: activeBlendMode,
-            fillBlendMode: activeFillBlendMode
+            fillBlendMode: activeFillBlendMode,
+            isStrokeEnabled: activeTool === ToolType.ERASER ? true : isStrokeEnabled
         };
         onStrokesChange([...strokes, newStroke]);
     }
     currentStrokePoints.current = [];
   };
 
+  // Grid Style
+  const gridStyle: React.CSSProperties = isGridEnabled ? {
+    backgroundImage: `
+        linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)
+    `,
+    backgroundSize: `${gridSize}px ${gridSize}px`
+  } : {};
+
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-full rounded-3xl overflow-hidden cursor-crosshair touch-none isolate shadow-inner"
+      className="relative w-full h-full rounded-3xl overflow-hidden cursor-crosshair touch-none isolate transition-colors duration-500"
       style={{ backgroundColor }}
       onMouseDown={handlePointerDown}
       onMouseMove={handlePointerMove}
@@ -380,14 +500,27 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       onTouchMove={handlePointerMove}
       onTouchEnd={handlePointerUp}
     >
+      {/* Grid Overlay - Rendered behind layers but on top of background color */}
+      {isGridEnabled && (
+          <div 
+            className="absolute inset-0 pointer-events-none opacity-50 z-0" 
+            style={gridStyle} 
+          />
+      )}
+
       {[0, 1, 2, 3, 4].map((index) => (
         <CanvasLayer 
             key={index} 
             index={index} 
+            activeLayerIndex={activeLayer}
             source={offscreenCanvases.current[index]} 
             isActive={activeLayer === index}
             isPlaying={isPlaying}
-            overscan={OVERSCAN_MARGIN}
+            globalBlendMode={globalLayerBlendMode}
+            layerBlendMode={layerBlendModes[index]}
+            isLowPowerMode={isLowPowerMode}
+            renderVersion={renderVersion}
+            isOnionSkinEnabled={isOnionSkinEnabled}
         />
       ))}
     </div>
@@ -396,29 +529,72 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
 const CanvasLayer: React.FC<{ 
     index: number, 
+    activeLayerIndex: number,
     source: HTMLCanvasElement | null, 
     isActive: boolean, 
     isPlaying: boolean,
-    overscan: number
-}> = ({ source, isActive, isPlaying }) => {
+    globalBlendMode: BlendMode,
+    layerBlendMode: BlendMode,
+    isLowPowerMode: boolean,
+    renderVersion: number,
+    isOnionSkinEnabled: boolean
+}> = ({ index, activeLayerIndex, source, isActive, isPlaying, globalBlendMode, layerBlendMode, isLowPowerMode, renderVersion, isOnionSkinEnabled }) => {
     const ref = useRef<HTMLCanvasElement>(null);
     
-    useEffect(() => {
-        const render = () => {
-            if (!ref.current || !source) return;
-            if (ref.current.width !== source.width) ref.current.width = source.width;
-            if (ref.current.height !== source.height) ref.current.height = source.height;
+    // The render function itself
+    const draw = () => {
+        if (!ref.current || !source) return;
+        if (ref.current.width !== source.width) ref.current.width = source.width;
+        if (ref.current.height !== source.height) ref.current.height = source.height;
 
-            const ctx = ref.current.getContext('2d');
-            if (ctx) {
-                ctx.clearRect(0, 0, ref.current.width, ref.current.height);
-                ctx.drawImage(source, 0, 0);
-            }
+        const ctx = ref.current.getContext('2d');
+        if (ctx) {
+            ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+            ctx.drawImage(source, 0, 0);
+        }
+    };
+
+    // Low Power Mode: Only draw when renderVersion changes
+    useEffect(() => {
+        if (isLowPowerMode) {
+            draw();
+        }
+    }, [isLowPowerMode, renderVersion, source]);
+
+    // High Performance Mode: Infinite Loop for maximum smoothness
+    useEffect(() => {
+        if (isLowPowerMode) return; 
+
+        const render = () => {
+            draw();
             requestAnimationFrame(render);
         };
         const req = requestAnimationFrame(render);
         return () => cancelAnimationFrame(req);
-    }, [source]);
+    }, [source, isLowPowerMode]);
+
+    let mixBlend = 'normal';
+    const modeToUse = layerBlendMode !== 'normal' ? layerBlendMode : globalBlendMode;
+
+    if (modeToUse === 'multiply') mixBlend = 'multiply';
+    else if (modeToUse === 'overlay') mixBlend = 'overlay';
+    else if (modeToUse === 'difference') mixBlend = 'difference';
+
+    // Opacity Logic
+    let opacity = 0.3; // Default inactive
+    
+    if (isPlaying) {
+        opacity = 1; // Always visible during playback
+    } else if (isActive) {
+        opacity = 1; // Active layer always fully visible
+    } else if (isOnionSkinEnabled) {
+        // Calculate opacity based on distance from active layer
+        const dist = Math.abs(index - activeLayerIndex);
+        // Map distance: 1 -> 0.7, 2 -> 0.4, 3 -> 0.2, 4 -> 0.1
+        opacity = Math.max(0.1, 1 - (dist * 0.25)); 
+    } else {
+        opacity = 0.3; // Flat dim if onion skin is disabled
+    }
 
     return (
         <canvas
@@ -426,9 +602,11 @@ const CanvasLayer: React.FC<{
             style={{ 
                 top: '50%', 
                 left: '50%', 
-                transform: 'translate(-50%, -50%)' 
+                transform: 'translate(-50%, -50%)',
+                mixBlendMode: mixBlend as any,
+                opacity: opacity
             }}
-            className={`layer-canvas absolute w-auto h-auto pointer-events-none transition-opacity duration-500 ease-in-out ${isPlaying || isActive ? 'opacity-100' : 'opacity-30'}`}
+            className={`layer-canvas absolute w-auto h-auto pointer-events-none transition-opacity duration-300 ease-in-out`}
         />
     );
 };

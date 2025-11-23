@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface LayerSliderProps {
@@ -10,26 +11,27 @@ export const LayerSlider: React.FC<LayerSliderProps> = ({ activeLayer, onChange 
   const layers = [4, 3, 2, 1, 0]; 
 
   return (
-    <div className="h-full flex flex-col items-center justify-center z-40 pointer-events-auto">
-      <div className="h-80 w-12 bg-[var(--tool-bg)] rounded-full flex flex-col items-center justify-between py-6 shadow-sm border border-white/50 relative">
+    <div className="w-full h-full flex flex-col items-center justify-center z-40 pointer-events-auto">
+      {/* The slider bar itself */}
+      <div className="w-full max-w-[2rem] h-80 bg-[var(--tool-bg)] rounded-full flex flex-col items-center justify-between py-6 border border-[var(--border-color)] relative">
         
-        {/* Track Line */}
-        <div className="absolute top-6 bottom-6 w-0.5 bg-[var(--accent-color)] z-0" />
-
         {layers.map((layerIndex) => (
           <button
             key={layerIndex}
             onClick={() => onChange(layerIndex)}
-            className={`
-              relative z-10 w-8 h-8 rounded-full border-2 transition-all duration-300 ease-in-out
-              flex items-center justify-center group
-              ${activeLayer === layerIndex 
-                ? 'bg-[var(--primary-bg)] border-[var(--active-color)] scale-125 shadow-sm' 
-                : 'bg-[var(--secondary-bg)] border-transparent hover:bg-[var(--accent-color)]'}
-            `}
+            className="relative z-10 w-8 h-8 flex items-center justify-center focus:outline-none appearance-none bg-transparent border-none p-0"
             title={`Layer ${layerIndex}`}
           >
-             <div className={`w-2 h-2 rounded-full transition-colors ${activeLayer === layerIndex ? 'bg-[var(--active-color)]' : 'bg-gray-300'}`} />
+             {/* Indicator Dot - purely scaling/coloring, no surrounding box */}
+             <div 
+                className={`
+                    rounded-full transition-all duration-300 ease-out
+                    ${activeLayer === layerIndex 
+                        ? 'w-4 h-4 bg-[var(--active-color)]' 
+                        : 'w-1.5 h-1.5 bg-[var(--slider-track)] hover:bg-[var(--active-color)] opacity-60 hover:opacity-100 hover:scale-150'
+                    }
+                `} 
+             />
           </button>
         ))}
       </div>
