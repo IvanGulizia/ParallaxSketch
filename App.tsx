@@ -46,6 +46,18 @@ const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
             
             <div className="space-y-3 text-sm text-gray-600">
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Menu / Help</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">Space</kbd></div>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Export JSON</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">E</kbd></div>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Pick Color</span>
+                    <div className="flex gap-1"><span className="text-xs italic">Right Click on Stroke</span></div>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Previous Palette</span>
                     <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">←</kbd></div>
                 </div>
@@ -61,17 +73,10 @@ const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
                     <span>Focus Layer (Back)</span>
                     <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">↓</kbd></div>
                 </div>
-                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                <div className="flex justify-between items-center">
                     <span>Depth of Field</span>
                     <div className="flex gap-1"><span className="text-xs italic">Shift + Scroll</span></div>
                 </div>
-                <div className="flex justify-between items-center">
-                    <span>Toggle Physics/Eco</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">Space</kbd></div>
-                </div>
-            </div>
-             <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400 text-center">
-                 On mobile, use swipe gestures (Left/Right/Up/Down) or pinch.
             </div>
         </div>
     </div>
@@ -316,6 +321,33 @@ export default function App() {
      }
      setState(s => ({ ...s, palette: PRESET_PALETTES[nextIndex] }));
   };
+  
+  // Import / Export Logic
+  const handleExport = () => {
+    const data = JSON.stringify({ 
+        version: 7,
+        palette: state.palette,
+        strokes: currentStrokes,
+        config: {
+            parallaxStrength: state.parallaxStrength,
+            parallaxInverted: state.parallaxInverted,
+            focalLayerIndex: state.focalLayerIndex,
+            springConfig: state.springConfig,
+            backgroundColor: state.canvasBackgroundColor,
+            globalLayerBlendMode: state.globalLayerBlendMode,
+            canvasWidth: state.canvasWidth,
+            layerBlendModes: state.layerBlendModes,
+            blurStrength: state.blurStrength,
+            focusRange: state.focusRange
+        }
+    });
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'zen-sketch.json';
+    a.click();
+  };
 
   // --- EMBED MODE INTERACTIONS (Shortcuts, Gestures, Hidden Features) ---
   useEffect(() => {
@@ -335,9 +367,15 @@ export default function App() {
                setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
           }
 
-          // Toggle Eco Mode (Space)
+          // Show Menu (Space)
           if (e.code === 'Space') {
-              setState(s => ({ ...s, isLowPowerMode: !s.isLowPowerMode }));
+              e.preventDefault(); // Prevent scrolling
+              setShowEmbedShortcuts(prev => !prev);
+          }
+          
+          // Export JSON (e)
+          if (e.key === 'e') {
+              handleExport();
           }
       };
 
@@ -345,7 +383,12 @@ export default function App() {
       const handleEmbedWheel = (e: WheelEvent) => {
           if (e.shiftKey) {
               e.preventDefault();
-              const delta = e.deltaY > 0 ? -1 : 1;
+              // Normalize delta for different input devices (trackpad vs mouse)
+              const sign = Math.sign(e.deltaY); 
+              // Mouse wheel down (positive) -> decrease blur (closer focus feel)
+              // Mouse wheel up (negative) -> increase blur
+              const delta = sign > 0 ? -1 : 1; 
+              
               setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, s.blurStrength + delta)) }));
           }
       };
@@ -415,7 +458,7 @@ export default function App() {
           window.removeEventListener('touchend', handleTouchEnd);
           window.removeEventListener('touchmove', handleTouchMove);
       };
-  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength]);
+  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, currentStrokes]); // Added strokes to dependency for export callback freshness
 
   // Sync Active Layer with Focal Layer in Embed Mode (So you draw where you focus)
   useEffect(() => {
@@ -607,33 +650,6 @@ export default function App() {
           activeColorSlot: slotIndex, 
           activeTool: ToolType.BRUSH // Auto switch to brush for convenience
       }));
-  };
-
-  // Import / Export Logic
-  const handleExport = () => {
-    const data = JSON.stringify({ 
-        version: 7,
-        palette: state.palette,
-        strokes: currentStrokes,
-        config: {
-            parallaxStrength: state.parallaxStrength,
-            parallaxInverted: state.parallaxInverted,
-            focalLayerIndex: state.focalLayerIndex,
-            springConfig: state.springConfig,
-            backgroundColor: state.canvasBackgroundColor,
-            globalLayerBlendMode: state.globalLayerBlendMode,
-            canvasWidth: state.canvasWidth,
-            layerBlendModes: state.layerBlendModes,
-            blurStrength: state.blurStrength,
-            focusRange: state.focusRange
-        }
-    });
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'zen-sketch.json';
-    a.click();
   };
 
   // Helper to encode state

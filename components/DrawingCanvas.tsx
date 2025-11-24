@@ -101,7 +101,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const isDraggingSelection = useRef(false);
   const dragStartPos = useRef<Point>({ x: 0, y: 0 });
 
-  // Version counter to trigger CanvasLayer updates without a loop in Low Power Mode
+  // Version counter to trigger CanvasLayer updates
   const [renderVersion, setRenderVersion] = useState(0);
 
   // Recording Ref
@@ -232,10 +232,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         ctx.shadowBlur = 0;
     });
     
-    // In low power mode, we need to notify CanvasLayer that a render happened
-    if (isLowPowerMode) {
-        setRenderVersion(v => v + 1);
-    }
+    // Notify render
+    setRenderVersion(v => v + 1);
   }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode]);
 
   useEffect(() => {
@@ -344,12 +342,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       const x = ((e.clientX - left) / width) * 2 - 1;
       const y = ((e.clientY - top) / height) * 2 - 1;
       
-      if (isLowPowerMode && !exportConfig?.isActive) {
-          currentOffset.current = { x, y };
-          applyParallaxTransforms(x, y);
-      } else {
-          targetOffset.current = { x, y };
-      }
+      // Update target, always. Smoothing happens in the loop.
+      targetOffset.current = { x, y };
     };
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
@@ -383,12 +377,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         x = Math.max(-1, Math.min(1, x));
         y = Math.max(-1, Math.min(1, y));
         
-        if (isLowPowerMode) {
-            currentOffset.current = { x, y };
-            applyParallaxTransforms(x, y);
-        } else {
-            targetOffset.current = { x, y };
-        }
+        targetOffset.current = { x, y };
     }
 
     if (isPlaying || exportConfig?.isActive) {
@@ -397,6 +386,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           window.addEventListener('deviceorientation', handleOrientation);
       }
     } else {
+        // Reset to center if not interacting
         if (!isLowPowerMode) targetOffset.current = { x: 0, y: 0 };
     }
 
@@ -423,41 +413,33 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
         switch (exportConfig.trajectory) {
             case TrajectoryType.CIRCLE:
-                // Standard Orbit
                 autoX = Math.cos(t);
                 autoY = Math.sin(t);
                 break;
             case TrajectoryType.FIGURE8:
-                // Lemniscate
                 const scale = 2 / (3 - Math.cos(2 * t));
                 autoX = scale * Math.cos(t);
                 autoY = scale * Math.sin(2 * t) / 2;
                 break;
             case TrajectoryType.SWAY_H:
-                // Horizontal Pan
                 autoX = Math.sin(t);
                 autoY = 0;
                 break;
             case TrajectoryType.SWAY_V:
-                // Vertical Pan
                 autoX = 0;
                 autoY = Math.sin(t);
                 break;
         }
         
-        // Direct assignment for smoothness in export
         nextX = autoX;
         nextY = autoY;
         
-        // Update refs for continuity
         targetOffset.current = { x: nextX, y: nextY };
         currentOffset.current = { x: nextX, y: nextY };
         velocity.current = { x: 0, y: 0 };
 
-        // Check for recording Stop
         if (exportConfig.isRecording && recordingStartTime.current > 0) {
             if (Date.now() - recordingStartTime.current >= durationMs) {
-                // Stop exactly at loop end
                  if (recorderRef.current && recorderRef.current.state === 'recording') {
                     recorderRef.current.stop();
                     recorderRef.current = null;
@@ -466,18 +448,26 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         }
 
     } else {
-        // Standard Spring Physics
-        const stiffness = springConfig.stiffness; 
-        const damping = springConfig.damping;
+        if (!isLowPowerMode) {
+            // Full Spring Physics
+            const stiffness = springConfig.stiffness; 
+            const damping = springConfig.damping;
 
-        const forceX = (targetOffset.current.x - currentOffset.current.x) * stiffness;
-        const forceY = (targetOffset.current.y - currentOffset.current.y) * stiffness;
+            const forceX = (targetOffset.current.x - currentOffset.current.x) * stiffness;
+            const forceY = (targetOffset.current.y - currentOffset.current.y) * stiffness;
 
-        velocity.current.x = (velocity.current.x + forceX) * damping;
-        velocity.current.y = (velocity.current.y + forceY) * damping;
+            velocity.current.x = (velocity.current.x + forceX) * damping;
+            velocity.current.y = (velocity.current.y + forceY) * damping;
 
-        nextX += velocity.current.x;
-        nextY += velocity.current.y;
+            nextX += velocity.current.x;
+            nextY += velocity.current.y;
+        } else {
+            // "Slight Damping" via simple Lerp for Eco Mode
+            // This answers the user request for slight smoothing without full physics
+            const lerpFactor = 0.15;
+            nextX += (targetOffset.current.x - nextX) * lerpFactor;
+            nextY += (targetOffset.current.y - nextY) * lerpFactor;
+        }
         
         currentOffset.current.x = nextX;
         currentOffset.current.y = nextY;
@@ -527,20 +517,17 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                 ctx.globalCompositeOperation = mixBlend as GlobalCompositeOperation;
                 ctx.drawImage(source, drawX, drawY);
                 
-                ctx.restore(); // Restore filter and composite
+                ctx.restore(); 
             });
         }
     }
 
-    if (!isLowPowerMode || exportConfig?.isActive) {
-        requestRef.current = requestAnimationFrame(animationLoop);
-    }
+    // Always run loop now to support the "Slight Damping" lerp in Eco Mode
+    requestRef.current = requestAnimationFrame(animationLoop);
   };
 
   useEffect(() => {
-    if (!isLowPowerMode || exportConfig?.isActive) {
-        requestRef.current = requestAnimationFrame(animationLoop);
-    }
+    requestRef.current = requestAnimationFrame(animationLoop);
     return () => cancelAnimationFrame(requestRef.current);
   }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange]); 
 
@@ -604,15 +591,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault();
 
-      // Embed Mode Shortcut Menu
-      if (isEmbedMode) {
-          onEmbedContextMenu?.();
-          return;
-      }
-
       if (exportConfig?.isActive) return;
 
-      // Global hit test (front to back)
+      // Always perform global color pick on right click, regardless of mode
       for (const layerId of [4, 3, 2, 1, 0]) {
           const pt = getNormalizedLocalPoint(e, layerId);
           const hitStroke = hitTest(pt, layerId);
