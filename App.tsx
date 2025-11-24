@@ -4,21 +4,39 @@ import { Toolbar } from './components/Toolbar';
 import { LayerSlider } from './components/LayerSlider';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { MenuOverlay } from './components/MenuOverlay';
-import { ToolType, AppState, Stroke, EraserMode, BlendMode } from './types';
+import { ToolType, AppState, Stroke, EraserMode, BlendMode, TrajectoryType } from './types';
 import { v4 as uuidv4 } from 'uuid';
 // @ts-ignore
 import LZString from 'lz-string';
 
-// Harmonious Pastel Palettes
+// Extended Harmonious Palettes
 const PRESET_PALETTES = [
     ['#E0BBE4', '#957DAD', '#D291BC', '#FEC8D8', '#FFDFD3'], // Pastel Sunset
     ['#F4F1DE', '#E07A5F', '#3D405B', '#81B29A', '#F2CC8F'], // Terra
     ['#CCD5AE', '#E9EDC9', '#FEFAE0', '#FAEDCD', '#D4A373'], // Nature
     ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51'], // Vivid
-    ['#4A4A4A', '#8C8C80', '#D8D4C5', '#EFEDE6', '#FDFCF8']  // Monochrome
+    ['#4A4A4A', '#8C8C80', '#D8D4C5', '#EFEDE6', '#FDFCF8'], // Monochrome
+    ['#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff'], // Rainbow Pastel
+    ['#a0c4ff', '#bdb2ff', '#ffc6ff', '#fffffc', '#d4d4d4'], // Soft Cool
+    ['#003049', '#d62828', '#f77f00', '#fcbf49', '#eae2b7'], // Retro Pop
+    ['#606c38', '#283618', '#fefae0', '#dda15e', '#bc6c25'], // Earthy Green
+    ['#2b2d42', '#8d99ae', '#edf2f4', '#ef233c', '#d90429'], // Americano
+    ['#fff100', '#ff8c00', '#e81123', '#ec008c', '#68217a'], // CMYK Vibes
+    ['#dad7cd', '#a3b18a', '#588157', '#3a5a40', '#344e41'], // Forest
+    ['#000000', '#14213d', '#fca311', '#e5e5e5', '#ffffff'], // High Contrast
+    ['#cdb4db', '#ffc8dd', '#ffafcc', '#bde0fe', '#a2d2ff'], // Cotton Candy
+    ['#7400b8', '#6930c3', '#5e60ce', '#5390d9', '#4ea8de'], // Deep Purple Blue
+    ['#e63946', '#f1faee', '#a8dadc', '#457b9d', '#1d3557'], // Americana
+    ['#f8f9fa', '#e9ecef', '#dee2e6', '#ced4da', '#adb5bd'], // Grays
+    ['#ffe5ec', '#ffc2d1', '#ffb3c6', '#ff8fab', '#fb6f92'], // Pink Love
+    ['#d8e2dc', '#ffe5d9', '#ffcad4', '#f4acb7', '#9d8189'], // Muted Rose
+    ['#03045e', '#023e8a', '#0077b6', '#0096c7', '#00b4d8']  // Ocean
 ];
 
 export default function App() {
+  // Detect Mobile for default settings
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   const [state, setState] = useState<AppState>({
     activeTool: ToolType.BRUSH,
     activeLayer: 2, 
@@ -36,11 +54,11 @@ export default function App() {
     springConfig: { stiffness: 0.2, damping: 0.2 }, // Default 20/20
     focalLayerIndex: 2, 
     isPlaying: false,
-    useGyroscope: false,
+    useGyroscope: isMobile, // Default to true on mobile
     isLowPowerMode: true, // Eco Mode by default
     eraserMode: EraserMode.STROKE, 
     isMenuOpen: false,
-    canvasBackgroundColor: '#FFFFFF',
+    canvasBackgroundColor: '#FFFFFF', // Ensures white by default
     canvasWidth: 100, // Default to 100% to show the 3x layout
     aspectRatio: null, // null = flexible
     
@@ -51,6 +69,8 @@ export default function App() {
     
     // Visual
     isOnionSkinEnabled: true,
+    blurStrength: 0,
+    focusRange: 0,
 
     globalLayerBlendMode: 'normal',
     layerBlendModes: { 0: 'normal', 1: 'normal', 2: 'normal', 3: 'normal', 4: 'normal' },
@@ -65,7 +85,7 @@ export default function App() {
         borderColor: "#efeadc",
         buttonBorder: "#efeadc",
         iconColor: "#18284c",
-        sliderTrack: "#efeadc",
+        sliderTrack: "#d3cdba", // Updated color request
         sliderFilled: "#97b1fb",
         sliderHandle: "#566fa8",
         disabledColor: "#d4cdb7",
@@ -73,12 +93,37 @@ export default function App() {
         scrollbarTrack: "#ffffff" 
     },
     isEmbedMode: false,
-    isTransparentEmbed: false
+    isTransparentEmbed: false,
+
+    // Export defaults
+    exportConfig: {
+        isActive: false,
+        isRecording: false,
+        trajectory: TrajectoryType.FIGURE8,
+        duration: 3,
+        format: 'webm'
+    }
   });
 
   const [history, setHistory] = useState<Stroke[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const currentStrokes = history[historyIndex];
+
+  // Request Gyro Permission helper
+  const requestGyroPermission = async () => {
+    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+            const response = await (DeviceOrientationEvent as any).requestPermission();
+            if (response === 'granted') {
+                return true;
+            }
+        } catch (e) {
+            console.error("Gyro permission error", e);
+        }
+        return false;
+    }
+    return true; // No permission needed on Android/Desktop usually
+  };
 
   // Apply UI Theme CSS Variables & Layout Spacing
   useEffect(() => {
@@ -193,7 +238,9 @@ export default function App() {
               parallaxInverted: data.c.pi === 1,
               canvasWidth: data.c.cw ?? s.canvasWidth,
               focalLayerIndex: data.c.fl ?? s.focalLayerIndex,
-              canvasBackgroundColor: isTransparent ? 'transparent' : (data.c.bg ?? s.canvasBackgroundColor)
+              canvasBackgroundColor: isTransparent ? 'transparent' : (data.c.bg ?? s.canvasBackgroundColor),
+              blurStrength: data.c.bs ?? s.blurStrength,
+              focusRange: data.c.fr ?? s.focusRange
               }));
           }
       } 
@@ -236,7 +283,48 @@ export default function App() {
             isLowPowerMode: false
         }));
 
-        // 1. Check for JSONBlob ID (Short Link)
+        // 0. Check for Direct External URL (e.g. Gist)
+        const externalUrl = params.get('url');
+        if (externalUrl) {
+            // Decode potential URI encoding
+            const decodedUrl = decodeURIComponent(externalUrl);
+            fetch(decodedUrl)
+                .then(res => {
+                    if (!res.ok) throw new Error("Failed to fetch external JSON");
+                    return res.json();
+                })
+                .then(data => loadData(data, isTransparent))
+                .catch(err => console.error("External fetch error:", err));
+            return;
+        }
+
+        // 1. Check for Supabase
+        const provider = params.get('provider');
+        const id = params.get('id');
+        const sbUrl = params.get('sbUrl');
+        const sbKey = params.get('sbKey');
+
+        if (provider === 'supabase' && id && sbUrl && sbKey) {
+            fetch(`${sbUrl}/rest/v1/sketches?id=eq.${id}&select=data`, {
+                headers: {
+                    'apikey': sbKey,
+                    'Authorization': `Bearer ${sbKey}`
+                }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error("Supabase fetch failed");
+                return res.json();
+            })
+            .then(data => {
+                if (data && data[0] && data[0].data) {
+                    loadData(data[0].data, isTransparent);
+                }
+            })
+            .catch(err => console.error(err));
+            return;
+        }
+
+        // 2. Check for JSONBlob ID (Short Link)
         const blobId = params.get('blob');
         if (blobId) {
             fetch(`https://jsonblob.com/api/jsonBlob/${blobId}`)
@@ -252,7 +340,7 @@ export default function App() {
             return; // Skip other methods
         }
 
-        // 2. Check for Encoded Data (Fallback)
+        // 3. Check for Encoded Data (Fallback)
         const encodedData = params.get('encoded');
         if (encodedData) {
             try {
@@ -275,8 +363,12 @@ export default function App() {
   }, []);
 
   const handleStrokesChange = useCallback((newStrokes: Stroke[]) => {
+    // Deep copy current strokes to ensure history immutability
+    // This fixes the undo/redo bug where reference mutation corrupted previous states
+    const safeStrokes = JSON.parse(JSON.stringify(newStrokes));
+
     const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newStrokes);
+    newHistory.push(safeStrokes);
     if (newHistory.length > 20) newHistory.shift();
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
@@ -311,6 +403,14 @@ export default function App() {
       setState(s => ({ ...s, palette: newPalette }));
   };
 
+  const handleColorPick = (slotIndex: number) => {
+      setState(s => ({ 
+          ...s, 
+          activeColorSlot: slotIndex, 
+          activeTool: ToolType.BRUSH // Auto switch to brush for convenience
+      }));
+  };
+
   // Import / Export Logic
   const handleExport = () => {
     const data = JSON.stringify({ 
@@ -325,7 +425,9 @@ export default function App() {
             backgroundColor: state.canvasBackgroundColor,
             globalLayerBlendMode: state.globalLayerBlendMode,
             canvasWidth: state.canvasWidth,
-            layerBlendModes: state.layerBlendModes
+            layerBlendModes: state.layerBlendModes,
+            blurStrength: state.blurStrength,
+            focusRange: state.focusRange
         }
     });
     const blob = new Blob([data], { type: 'application/json' });
@@ -358,7 +460,9 @@ export default function App() {
              pi: state.parallaxInverted ? 1 : 0,
              bg: state.canvasBackgroundColor,
              cw: state.canvasWidth,
-             fl: state.focalLayerIndex
+             fl: state.focalLayerIndex,
+             bs: state.blurStrength,
+             fr: state.focusRange
          }
      };
 
@@ -379,6 +483,19 @@ export default function App() {
         }
     };
     reader.readAsText(file);
+  };
+
+  const handleTogglePlay = async () => {
+    // On first play on Mobile, ask for Gyro permission
+    if (isMobile && !state.isPlaying) {
+        if (state.useGyroscope) {
+             const granted = await requestGyroPermission();
+             if (!granted) {
+                 setState(s => ({ ...s, useGyroscope: false }));
+             }
+        }
+    }
+    setState(s => ({ ...s, isPlaying: !s.isPlaying }));
   };
 
   // Layout Style Logic
@@ -426,7 +543,7 @@ export default function App() {
                 canUndo={historyIndex > 0}
                 canRedo={historyIndex < history.length - 1}
                 isEmbedMode={state.isEmbedMode}
-                onTogglePlay={() => setState(s => ({ ...s, isPlaying: !s.isPlaying }))}
+                onTogglePlay={handleTogglePlay}
                 onToolChange={(tool) => setState(s => ({ ...s, activeTool: tool }))}
                 onColorSlotChange={(index, isSecondary) => {
                     if (isSecondary) {
@@ -505,8 +622,14 @@ export default function App() {
                     useGyroscope={state.useGyroscope}
                     isLowPowerMode={state.isLowPowerMode}
                     isOnionSkinEnabled={state.isOnionSkinEnabled}
+                    blurStrength={state.blurStrength}
+                    focusRange={state.focusRange}
                     onStrokesChange={handleStrokesChange}
                     strokes={currentStrokes}
+                    exportConfig={state.exportConfig}
+                    onExportComplete={() => setState(s => ({ ...s, exportConfig: { ...s.exportConfig, isRecording: false } }))}
+                    onStopPreview={() => setState(s => ({ ...s, exportConfig: { ...s.exportConfig, isActive: false, isRecording: false } }))}
+                    onColorPick={handleColorPick}
                 />
             </div>
             
@@ -546,6 +669,9 @@ export default function App() {
                 useGyroscope={state.useGyroscope}
                 isLowPowerMode={state.isLowPowerMode}
                 isOnionSkinEnabled={state.isOnionSkinEnabled}
+                blurStrength={state.blurStrength}
+                focusRange={state.focusRange}
+                exportConfig={state.exportConfig}
                 getEncodedState={getEncodedState}
                 onClose={() => setState(s => ({ ...s, isMenuOpen: false }))}
                 onImport={handleImport}
@@ -567,6 +693,9 @@ export default function App() {
                 onUseGyroscopeChange={(val) => setState(s => ({ ...s, useGyroscope: val }))}
                 onLowPowerModeChange={(val) => setState(s => ({ ...s, isLowPowerMode: val }))}
                 onOnionSkinEnabledChange={(val) => setState(s => ({ ...s, isOnionSkinEnabled: val }))}
+                onBlurStrengthChange={(val) => setState(s => ({ ...s, blurStrength: val }))}
+                onFocusRangeChange={(val) => setState(s => ({ ...s, focusRange: val }))}
+                onExportConfigChange={(config) => setState(s => ({ ...s, exportConfig: config }))}
             />
         </div>
       </div>

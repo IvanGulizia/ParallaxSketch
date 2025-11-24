@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Icons } from './Icons';
-import { SpringConfig, UITheme, BlendMode } from '../types';
+import { SpringConfig, UITheme, BlendMode, ExportConfig, TrajectoryType, ExportFormat } from '../types';
 import { Slider } from './Slider';
 // @ts-ignore
 import LZString from 'lz-string';
@@ -73,6 +73,9 @@ interface MenuOverlayProps {
   useGyroscope: boolean;
   isLowPowerMode: boolean;
   isOnionSkinEnabled: boolean;
+  blurStrength: number;
+  focusRange: number;
+  exportConfig: ExportConfig;
   getEncodedState: () => string; 
   onClose: () => void;
   onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -94,6 +97,9 @@ interface MenuOverlayProps {
   onUseGyroscopeChange: (val: boolean) => void;
   onLowPowerModeChange: (val: boolean) => void;
   onOnionSkinEnabledChange: (val: boolean) => void;
+  onBlurStrengthChange: (val: number) => void;
+  onFocusRangeChange: (val: number) => void;
+  onExportConfigChange: (config: ExportConfig) => void;
 }
 
 export const MenuOverlay: React.FC<MenuOverlayProps> = ({ 
@@ -115,6 +121,9 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     useGyroscope,
     isLowPowerMode,
     isOnionSkinEnabled,
+    blurStrength,
+    focusRange,
+    exportConfig,
     getEncodedState,
     onClose, 
     onImport, 
@@ -135,17 +144,24 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     onGridSizeChange,
     onUseGyroscopeChange,
     onLowPowerModeChange,
-    onOnionSkinEnabledChange
+    onOnionSkinEnabledChange,
+    onBlurStrengthChange,
+    onFocusRangeChange,
+    onExportConfigChange
 }) => {
   const [showShare, setShowShare] = useState(false);
   const [shareTransparent, setShareTransparent] = useState(false);
   const [shareGyro, setShareGyro] = useState(useGyroscope);
   
-  const [cloudStatus, setCloudStatus] = useState<'idle' | 'uploading' | 'success' | 'error-fallback'>('idle');
-  const [cloudLink, setCloudLink] = useState('');
-  
+  // Export Studio State
+  const [showExportStudio, setShowExportStudio] = useState(false);
+
+  // External Link Generator
+  const [externalUrlInput, setExternalUrlInput] = useState('');
+  const [generatedExternalLink, setGeneratedExternalLink] = useState('');
+
   const menuRef = useRef<HTMLDivElement>(null);
-  
+
   // Close on click outside
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -180,86 +196,29 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 
   if (!isOpen) return null;
   
-  const generateCloudLink = async () => {
-      setCloudStatus('uploading');
+  const generateExternalLink = () => {
+      if (!externalUrlInput) return;
       
-      const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
-      const rawData = getEncodedState();
-      
-      // FALLBACK: Client-side compression if cloud fetch fails
-      const generateFallbackLink = () => {
-          try {
-            const compressed = LZString.compressToEncodedURIComponent(rawData);
-            const url = new URL(origin + window.location.pathname);
-            url.searchParams.set('mode', 'embed');
-            url.searchParams.set('encoded', compressed);
-            url.searchParams.set('strength', parallaxStrength.toString());
-            url.searchParams.set('inverted', parallaxInverted.toString());
-            url.searchParams.set('gyro', shareGyro.toString());
-            if (shareTransparent) {
-                url.searchParams.set('bg', 'transparent');
-            } else {
-                url.searchParams.set('bg', backgroundColor.replace('#', ''));
-            }
-            setCloudLink(url.toString());
-            setCloudStatus('error-fallback');
-          } catch (err) {
-            console.error("Compression failed", err);
-          }
-      };
+      let finalUrl = externalUrlInput;
 
-      try {
-          // Attempt JSONBlob Cloud Upload
-          // Added referrerPolicy and credentials omit to fix CORS NetworkErrors in strict environments
-          const response = await fetch('https://jsonblob.com/api/jsonBlob', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json'
-              },
-              mode: 'cors',
-              credentials: 'omit',
-              referrerPolicy: 'no-referrer',
-              body: rawData
-          });
-
-          if (!response.ok) throw new Error(`Cloud Error: ${response.statusText}`);
-          
-          const locationHeader = response.headers.get('Location');
-          if (!locationHeader) throw new Error("No location header from cloud");
-          
-          const blobId = locationHeader.split('/').pop();
-          
-          const url = new URL(origin + window.location.pathname);
-          url.searchParams.set('mode', 'embed');
-          url.searchParams.set('blob', blobId || '');
-          url.searchParams.set('strength', parallaxStrength.toString());
-          url.searchParams.set('inverted', parallaxInverted.toString());
-          url.searchParams.set('gyro', shareGyro.toString());
-          
-          if (shareTransparent) {
-              url.searchParams.set('bg', 'transparent');
-          } else {
-              url.searchParams.set('bg', backgroundColor.replace('#', ''));
-          }
-
-          setCloudLink(url.toString());
-          setCloudStatus('success');
-
-      } catch (e) {
-          console.warn("Cloud upload unavailable, switching to offline link.", e);
-          generateFallbackLink();
+      // Gist Helper: Convert standard gist links to raw content links automatically
+      // https://gist.github.com/User/Hash -> https://gist.githubusercontent.com/User/Hash/raw
+      if (finalUrl.includes('gist.github.com') && !finalUrl.includes('raw')) {
+         finalUrl = finalUrl.replace('gist.github.com', 'gist.githubusercontent.com') + '/raw';
       }
-  };
 
-  const handleExportTheme = () => {
-      const data = JSON.stringify(uiTheme, null, 2);
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'zen-theme.json';
-      a.click();
+      // Check origin
+      const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
+      const url = new URL(origin + window.location.pathname);
+      
+      url.searchParams.set('mode', 'embed');
+      url.searchParams.set('url', finalUrl); // The fetcher in App.tsx will handle the decoding
+      url.searchParams.set('strength', parallaxStrength.toString());
+      url.searchParams.set('inverted', parallaxInverted.toString());
+      if (shareTransparent) url.searchParams.set('bg', 'transparent');
+      else url.searchParams.set('bg', backgroundColor.replace('#', ''));
+      
+      setGeneratedExternalLink(url.toString());
   };
 
   return (
@@ -335,11 +294,37 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                 
                 <Separator />
                 
-                <ControlRow label="Layer Opacity">
+                <ControlRow label="Depth of Field">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-medium w-8 text-right">{blurStrength}px</span>
+                        <div className="w-24">
+                            <Slider 
+                                min={0} max={20} step={1}
+                                value={blurStrength} 
+                                onChange={onBlurStrengthChange}
+                            />
+                        </div>
+                    </div>
+                </ControlRow>
+
+                <ControlRow label="Focus Range">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-medium w-8 text-right">±{focusRange}</span>
+                         <div className="w-24">
+                            <Slider 
+                                min={0} max={2} step={0.5}
+                                value={focusRange} 
+                                onChange={onFocusRangeChange}
+                            />
+                        </div>
+                    </div>
+                </ControlRow>
+                
+                <ControlRow label="Onion Skin">
                     <ToggleBtn 
                         checked={isOnionSkinEnabled} 
                         onChange={() => onOnionSkinEnabledChange(!isOnionSkinEnabled)} 
-                        label={isOnionSkinEnabled ? 'Depth' : 'Flat'}
+                        label={isOnionSkinEnabled ? 'Visible' : 'Hidden'}
                     />
                 </ControlRow>
 
@@ -462,58 +447,9 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
             </div>
         </div>
 
-         {/* SECTION: THEME */}
-         <div>
-            <div className="flex items-center justify-between">
-                <SectionTitle>Interface Theme</SectionTitle>
-                <button onClick={handleExportTheme} className="text-[10px] text-[var(--active-color)] hover:underline opacity-80">
-                    Export JSON
-                </button>
-            </div>
-            
-            <div className="bg-[var(--tool-bg)] p-4 rounded-2xl border border-[var(--border-color)]">
-                <div className="grid grid-cols-2 gap-3">
-                    {[
-                        { key: 'activeColor', label: 'Active Tint' },
-                        { key: 'iconColor', label: 'Icons' },
-                        { key: 'textColor', label: 'Text Primary' },
-                        { key: 'secondaryText', label: 'Text Secondary' },
-                        { key: 'toolBg', label: 'Tool Bg' },
-                        { key: 'menuBg', label: 'Menu Bg' },
-                        { key: 'appBg', label: 'App Bg' },
-                        { key: 'buttonBg', label: 'Button Bg' },
-                        { key: 'borderColor', label: 'Borders' },
-                        { key: 'buttonBorder', label: 'Btn Borders' },
-                        { key: 'sliderTrack', label: 'Slider Track' },
-                        { key: 'sliderFilled', label: 'Slider Fill' },
-                        { key: 'sliderHandle', label: 'Slider Handle' },
-                        { key: 'disabledColor', label: 'Disabled' },
-                        { key: 'scrollbarThumb', label: 'Scrollbar' },
-                        { key: 'scrollbarTrack', label: 'Scrollbar BG' },
-                    ].map((item) => (
-                        <div key={item.key} className="flex flex-col gap-1">
-                            <span className="text-[9px] text-[var(--secondary-text)] font-medium uppercase tracking-wide">{item.label}</span>
-                            <div className="flex items-center gap-2 p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--secondary-bg)] relative hover:border-[var(--active-color)] transition-colors">
-                                <div 
-                                    className="w-full h-4 rounded shadow-sm border border-black/5 shrink-0" 
-                                    style={{ backgroundColor: uiTheme[item.key as keyof UITheme] as string }}
-                                />
-                                <input 
-                                    type="color" 
-                                    value={uiTheme[item.key as keyof UITheme] as string}
-                                    onChange={(e) => onUIThemeChange({ ...uiTheme, [item.key]: e.target.value })}
-                                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-                                />
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-
         {/* SECTION: DATA */}
         <div>
-            <SectionTitle>Share & Embed</SectionTitle>
+            <SectionTitle>Share & Export</SectionTitle>
             <div className="grid grid-cols-2 gap-3">
                  
                  {/* 1. Import */}
@@ -523,12 +459,11 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     <input type="file" accept=".json" onChange={onImport} className="hidden" />
                  </label>
 
-                 {/* 2. Share */}
+                 {/* 2. Share Generator */}
                  <button 
                     onClick={() => {
                         setShowShare(!showShare);
-                        setCloudStatus('idle');
-                        setCloudLink('');
+                        setShowExportStudio(false);
                     }}
                     className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all group ${
                         showShare 
@@ -537,10 +472,10 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     }`}
                  >
                     <Icons.Link size={20} className={`mb-1 ${showShare ? 'text-white' : 'text-[var(--icon-color)] group-hover:text-[var(--active-color)]'}`} />
-                    <span className={`text-[10px] font-medium ${showShare ? 'text-white' : 'text-[var(--text-color)]'}`}>Embed Code</span>
+                    <span className={`text-[10px] font-medium ${showShare ? 'text-white' : 'text-[var(--text-color)]'}`}>Share Link</span>
                  </button>
 
-                 {/* 3. Export */}
+                 {/* 3. Export JSON */}
                  <button 
                     onClick={onExport}
                     className="flex flex-col items-center justify-center p-4 rounded-xl bg-[var(--tool-bg)] border border-[var(--border-color)] hover:border-[var(--active-color)] hover:bg-[var(--secondary-bg)] transition-all group"
@@ -549,15 +484,101 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     <span className="text-[10px] font-medium text-[var(--text-color)]">Download JSON</span>
                  </button>
 
-                 {/* 4. Reset */}
+                 {/* 4. Video Export */}
                  <button 
-                    onClick={onReset}
-                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-red-50 border border-red-100 hover:bg-red-100 transition-all group"
+                    onClick={() => {
+                        setShowExportStudio(!showExportStudio);
+                        setShowShare(false);
+                    }}
+                    className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all group ${
+                        showExportStudio 
+                        ? 'bg-[var(--active-color)] border-[var(--active-color)]' 
+                        : 'bg-[var(--tool-bg)] border-[var(--border-color)] hover:bg-[var(--secondary-bg)]'
+                    }`}
                  >
-                    <Icons.Trash size={20} className="text-red-400 mb-1 group-hover:text-red-600" />
-                    <span className="text-[10px] font-medium text-red-600">Reset All</span>
+                    <Icons.Play size={20} className={`mb-1 ${showExportStudio ? 'text-white' : 'text-[var(--icon-color)] group-hover:text-[var(--active-color)]'}`} />
+                    <span className={`text-[10px] font-medium ${showExportStudio ? 'text-white' : 'text-[var(--text-color)]'}`}>Export Video</span>
                  </button>
             </div>
+            
+            {/* Export Studio Panel */}
+            {showExportStudio && (
+                 <div className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-4">
+                    <div className="space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Motion Path</span>
+                        <div className="grid grid-cols-4 gap-1">
+                            {[TrajectoryType.CIRCLE, TrajectoryType.FIGURE8, TrajectoryType.SWAY_H, TrajectoryType.SWAY_V].map(type => (
+                                <button
+                                    key={type}
+                                    onClick={() => onExportConfigChange({...exportConfig, trajectory: type})}
+                                    className={`py-2 rounded-lg text-[9px] font-medium border transition-all ${
+                                        exportConfig.trajectory === type
+                                        ? 'bg-[var(--active-color)] text-white border-[var(--active-color)]'
+                                        : 'bg-[var(--button-bg)] text-[var(--text-color)] border-[var(--button-border)] hover:bg-[var(--secondary-bg)]'
+                                    }`}
+                                >
+                                    {type === TrajectoryType.CIRCLE ? 'Circle' : type === TrajectoryType.FIGURE8 ? 'Fig. 8' : type === TrajectoryType.SWAY_H ? 'Horiz.' : 'Vert.'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Format</span>
+                        <div className="flex bg-[var(--secondary-bg)] p-1 rounded-lg border border-[var(--button-border)]">
+                            {(['webm', 'mp4'] as ExportFormat[]).map(fmt => (
+                                <button 
+                                    key={fmt}
+                                    onClick={() => onExportConfigChange({...exportConfig, format: fmt})}
+                                    className={`flex-1 py-1.5 rounded text-[10px] font-medium transition-all uppercase ${exportConfig.format === fmt ? 'bg-[var(--button-bg)] shadow-sm text-[var(--active-color)]' : 'text-[var(--secondary-text)]'}`}
+                                >
+                                    {fmt}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[9px] text-[var(--secondary-text)] text-center">
+                            {exportConfig.format === 'webm' ? "Best Quality & Looping (Recommended)" : "MP4 (Experimental/Safari)"}
+                        </p>
+                    </div>
+
+                    <ControlRow label={`Duration: ${exportConfig.duration}s`}>
+                        <div className="w-32">
+                             <Slider 
+                                min={1} max={10} step={1}
+                                value={exportConfig.duration} 
+                                onChange={(v) => onExportConfigChange({...exportConfig, duration: v})}
+                            />
+                        </div>
+                    </ControlRow>
+                    
+                    <Separator />
+
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => onExportConfigChange({...exportConfig, isActive: !exportConfig.isActive, isRecording: false})}
+                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                                exportConfig.isActive && !exportConfig.isRecording
+                                ? 'bg-[var(--active-color)] text-white border-[var(--active-color)]'
+                                : 'bg-[var(--button-bg)] text-[var(--text-color)] border-[var(--button-border)] hover:bg-[var(--secondary-bg)]'
+                            }`}
+                        >
+                            {exportConfig.isActive && !exportConfig.isRecording ? 'Stop Preview' : 'Preview Loop'}
+                        </button>
+                        
+                        <button
+                            onClick={() => onExportConfigChange({...exportConfig, isActive: true, isRecording: true})}
+                            disabled={exportConfig.isRecording}
+                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                                exportConfig.isRecording
+                                ? 'bg-red-50 text-red-500 border-red-500 cursor-wait'
+                                : 'bg-[var(--active-color)] text-white border-[var(--active-color)] opacity-90 hover:opacity-100'
+                            }`}
+                        >
+                            {exportConfig.isRecording ? 'Recording...' : 'Record Video'}
+                        </button>
+                    </div>
+                 </div>
+            )}
             
             {showShare && (
                  <div className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-4">
@@ -569,61 +590,45 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                                 <input type="checkbox" checked={shareTransparent} onChange={(e) => setShareTransparent(e.target.checked)} />
                                 <span className="text-[10px] text-[var(--text-color)]">Transparent BG</span>
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" checked={shareGyro} onChange={(e) => setShareGyro(e.target.checked)} />
-                                <span className="text-[10px] text-[var(--text-color)]">Enable Gyro</span>
-                            </label>
                         </div>
                     </div>
 
                     <Separator />
-
-                    <div className="space-y-3">
-                         <div className="flex flex-col gap-2">
-                             <button 
-                                onClick={generateCloudLink}
-                                disabled={cloudStatus === 'uploading'}
-                                className={`w-full py-3 rounded-lg text-xs font-semibold uppercase tracking-wide transition-all ${
-                                    cloudStatus === 'uploading'
-                                    ? 'bg-gray-100 text-gray-400 cursor-wait'
-                                    : 'bg-[var(--active-color)] text-white hover:opacity-90 shadow-md hover:shadow-lg'
-                                }`}
-                             >
-                                 {cloudStatus === 'uploading' ? 'Generating Link...' : 'Generate Automatic Link'}
-                             </button>
-                             {cloudStatus === 'error-fallback' && (
-                                 <div className="bg-blue-50 text-blue-700 p-2 rounded text-[10px] text-center border border-blue-100">
-                                     <strong>Offline Link Generated</strong><br/>
-                                     Cloud upload unavailable. Using compressed data link.
-                                 </div>
-                             )}
-                         </div>
-
-                        {cloudLink && (cloudStatus === 'success' || cloudStatus === 'error-fallback') && (
-                            <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                <div className="flex justify-between items-end">
-                                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Copy Embed Code</span>
-                                    <button 
-                                        onClick={() => navigator.clipboard.writeText(cloudLink)}
-                                        className="text-[10px] text-[var(--active-color)] hover:underline"
-                                    >
-                                        Copy Direct Link
-                                    </button>
-                                </div>
+                    
+                    <div className="space-y-3 p-3 bg-[var(--secondary-bg)] rounded-lg border border-[var(--border-color)] animate-in fade-in">
+                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Embed from External Link</span>
+                        <span className="text-[9px] text-[var(--secondary-text)] block">
+                            Paste your JSON URL (e.g. GitHub Gist or Raw file) below.
+                        </span>
+                        <input 
+                            type="text" 
+                            placeholder="https://gist.github.com/..."
+                            value={externalUrlInput}
+                            onChange={(e) => setExternalUrlInput(e.target.value)}
+                            className="w-full text-[10px] p-2 rounded border border-[var(--border-color)] focus:outline-none focus:border-[var(--active-color)]"
+                        />
+                        <button 
+                            onClick={generateExternalLink}
+                            disabled={!externalUrlInput}
+                            className="w-full py-2 bg-[var(--active-color)] text-white rounded text-[10px] font-medium hover:opacity-90 transition-opacity"
+                        >
+                            Generate Embed Code
+                        </button>
+                        {generatedExternalLink && (
+                            <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1">
                                 <textarea 
                                     readOnly
                                     onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                                    className="w-full h-24 text-[10px] font-mono bg-[var(--secondary-bg)] border border-[var(--border-color)] rounded-lg p-2 resize-none focus:outline-none text-[var(--text-color)]"
-                                    value={`<iframe src="${cloudLink}" width="100%" height="600" style="border:none; border-radius:12px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`}
+                                    className="w-full h-24 text-[9px] font-mono bg-white border border-[var(--border-color)] rounded p-2 resize-none focus:outline-none"
+                                    value={`<iframe src="${generatedExternalLink}" width="100%" height="600" style="border:none; border-radius:12px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`}
                                 />
-                                <p className="text-[9px] text-[var(--secondary-text)] text-center">
-                                    {cloudStatus === 'success' 
-                                        ? "Hosted via JSONBlob. No setup required." 
-                                        : "Offline Mode. Works everywhere but URL is long."}
+                                <p className="text-[9px] text-green-600 font-medium text-center">
+                                    Code generated! Copy and paste into your site.
                                 </p>
                             </div>
                         )}
                     </div>
+
                 </div>
             )}
         </div>

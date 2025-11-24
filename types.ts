@@ -1,5 +1,4 @@
 
-
 export enum ToolType {
   BRUSH = 'BRUSH',
   ERASER = 'ERASER',
@@ -56,6 +55,23 @@ export interface UITheme {
   scrollbarTrack: string; 
 }
 
+export enum TrajectoryType {
+  CIRCLE = 'CIRCLE',
+  FIGURE8 = 'FIGURE8',
+  SWAY_H = 'SWAY_H',
+  SWAY_V = 'SWAY_V'
+}
+
+export type ExportFormat = 'webm' | 'mp4';
+
+export interface ExportConfig {
+  isActive: boolean; // Is previewing or recording
+  isRecording: boolean;
+  trajectory: TrajectoryType;
+  duration: number; // seconds
+  format: ExportFormat;
+}
+
 export interface AppState {
   activeTool: ToolType;
   activeLayer: number; // 0 to 4
@@ -88,10 +104,15 @@ export interface AppState {
 
   // Visual Settings
   isOnionSkinEnabled: boolean; // New: Depth based opacity
+  blurStrength: number; // 0 to 20px blur for depth of field
+  focusRange: number; // 0 to 2 layers around focal point stay sharp
 
   globalLayerBlendMode: BlendMode; 
   layerBlendModes: Record<number, BlendMode>; // Per-layer blend mode (CSS mix-blend-mode)
   uiTheme: UITheme; 
   isEmbedMode: boolean;
   isTransparentEmbed: boolean; // New: for transparent background embeds
+
+  // Export
+  exportConfig: ExportConfig;
 }
