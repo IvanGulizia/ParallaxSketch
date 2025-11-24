@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from './Icons';
 import { ToolType, EraserMode, BlendMode } from '../types';
@@ -23,7 +24,7 @@ interface ToolbarProps {
   onToolChange: (tool: ToolType) => void;
   onColorSlotChange: (index: number, isSecondary?: boolean) => void;
   onPaletteChange: (index: number, newColor: string) => void;
-  onRandomizePalette: () => void;
+  onCyclePalette: (direction: -1 | 1) => void;
   onBlendModeChange: (mode: BlendMode, isFill?: boolean) => void;
   onToggleFill: (enabled: boolean) => void;
   onToggleColorSync: (enabled: boolean) => void;
@@ -56,7 +57,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onToolChange,
   onColorSlotChange,
   onPaletteChange,
-  onRandomizePalette,
+  onCyclePalette,
   onBlendModeChange,
   onToggleFill,
   onToggleColorSync,
@@ -195,6 +196,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                         {((!isEditingFill) || (isEditingFill && isFillEnabled)) && (
                             <>
                                 <div className={`flex gap-2 justify-center flex-wrap items-center transition-opacity duration-200 ${isEditingFill && isColorSynced ? 'opacity-50 pointer-events-none grayscale' : 'opacity-100'}`}>
+                                    
+                                    {/* Palette Prev */}
+                                    <button
+                                        onClick={() => onCyclePalette(-1)}
+                                        className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-black transition-colors"
+                                    >
+                                        <Icons.ChevronLeft size={14} />
+                                    </button>
+
                                     {palette.map((color, index) => {
                                         const isActive = isEditingFill 
                                             ? activeSecondaryColorSlot === index 
@@ -227,13 +237,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                                         )
                                     })}
                                     
-                                    {/* Randomize Button */}
+                                    {/* Palette Next */}
                                     <button
-                                        onClick={onRandomizePalette}
-                                        className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-black transition-colors"
-                                        title="Randomize Palette"
+                                        onClick={() => onCyclePalette(1)}
+                                        className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-black transition-colors"
                                     >
-                                        <Icons.Random size={16} />
+                                        <Icons.ChevronRight size={14} />
                                     </button>
                                 </div>
                             </>

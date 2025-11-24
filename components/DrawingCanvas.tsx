@@ -1,4 +1,5 @@
 
+
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { ToolType, Point, Stroke, EraserMode, SpringConfig, BlendMode, ExportConfig, TrajectoryType } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,7 +37,9 @@ interface DrawingCanvasProps {
   onExportComplete?: () => void;
   onStopPreview?: () => void;
   onColorPick?: (colorSlot: number) => void;
+  onEmbedContextMenu?: () => void;
   strokes: Stroke[];
+  isEmbedMode?: boolean;
 }
 
 // Overscan amount in pixels (added to all sides) to prevent hard edges during parallax
@@ -75,7 +78,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   onExportComplete,
   onStopPreview,
   onColorPick,
-  strokes
+  onEmbedContextMenu,
+  strokes,
+  isEmbedMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -204,7 +209,13 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                 else if (stroke.blendMode === 'difference') compositeOp = 'difference';
 
                 ctx.globalCompositeOperation = compositeOp;
-                ctx.strokeStyle = palette[stroke.colorSlot] || '#000000';
+                
+                // If active color slot is -1, it means "Default White" for embed mode or similar overrides
+                if (stroke.colorSlot === -1) {
+                    ctx.strokeStyle = '#FFFFFF';
+                } else {
+                    ctx.strokeStyle = palette[stroke.colorSlot] || '#000000';
+                }
                 
                 if (stroke.id === selectedStrokeId) {
                     ctx.shadowColor = '#000000';
@@ -592,6 +603,13 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault();
+
+      // Embed Mode Shortcut Menu
+      if (isEmbedMode) {
+          onEmbedContextMenu?.();
+          return;
+      }
+
       if (exportConfig?.isActive) return;
 
       // Global hit test (front to back)
@@ -638,6 +656,22 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+    // Special Mobile Embed Case: Simulate Parallax with touch
+    if (isEmbedMode && !useGyroscope && containerRef.current) {
+         let clientX, clientY;
+        if ('touches' in e) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = (e as React.MouseEvent).clientX;
+            clientY = (e as React.MouseEvent).clientY;
+        }
+        const { width, height, left, top } = containerRef.current.getBoundingClientRect();
+        const x = ((clientX - left) / width) * 2 - 1;
+        const y = ((clientY - top) / height) * 2 - 1;
+        targetOffset.current = { x, y };
+    }
+
     if (exportConfig?.isActive) return;
 
     const pt = getNormalizedLocalPoint(e);

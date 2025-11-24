@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Icons } from './Icons';
 import { SpringConfig, UITheme, BlendMode, ExportConfig, TrajectoryType, ExportFormat } from '../types';
@@ -151,7 +152,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 }) => {
   const [showShare, setShowShare] = useState(false);
   const [shareTransparent, setShareTransparent] = useState(false);
-  const [shareGyro, setShareGyro] = useState(useGyroscope);
   
   // Export Studio State
   const [showExportStudio, setShowExportStudio] = useState(false);
@@ -161,6 +161,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
   const [generatedExternalLink, setGeneratedExternalLink] = useState('');
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const shareSectionRef = useRef<HTMLDivElement>(null);
 
   // Close on click outside
   useEffect(() => {
@@ -175,6 +176,15 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       if (isOpen) document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
+  
+  // Auto scroll to share section
+  useEffect(() => {
+      if (showShare && shareSectionRef.current) {
+          setTimeout(() => {
+            shareSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+      }
+  }, [showShare]);
 
   const requestGyroPermission = async () => {
     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
@@ -213,8 +223,32 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       
       url.searchParams.set('mode', 'embed');
       url.searchParams.set('url', finalUrl); // The fetcher in App.tsx will handle the decoding
+      
+      // -- Explicitly include ALL parameters as requested --
+      
+      // Visuals
       url.searchParams.set('strength', parallaxStrength.toString());
       url.searchParams.set('inverted', parallaxInverted.toString());
+      url.searchParams.set('stiffness', springConfig.stiffness.toString());
+      url.searchParams.set('damping', springConfig.damping.toString());
+      url.searchParams.set('blur', blurStrength.toString());
+      url.searchParams.set('focus', focusRange.toString());
+      url.searchParams.set('focalLayer', focalLayerIndex.toString());
+      
+      // Grid & Canvas
+      url.searchParams.set('grid', isGridEnabled.toString());
+      url.searchParams.set('snap', isSnappingEnabled.toString());
+      url.searchParams.set('gridSize', gridSize.toString());
+      url.searchParams.set('width', canvasWidth.toString());
+      if (aspectRatio) url.searchParams.set('aspect', aspectRatio.toString());
+
+      // Blends
+      url.searchParams.set('globalBlend', globalLayerBlendMode);
+      
+      // Physics / Gyro
+      url.searchParams.set('gyro', useGyroscope.toString());
+
+      // Background
       if (shareTransparent) url.searchParams.set('bg', 'transparent');
       else url.searchParams.set('bg', backgroundColor.replace('#', ''));
       
@@ -581,7 +615,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
             )}
             
             {showShare && (
-                 <div className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-4">
+                 <div ref={shareSectionRef} className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-4">
                     
                     <div className="space-y-2">
                         <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Options</span>

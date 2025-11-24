@@ -6,7 +6,7 @@ import {
   Layers, MoveHorizontal, Undo2, Redo2, Trash2, XCircle,
   Menu, Download, Upload, PaintBucket, Shuffle, Share2, Link,
   Link2, Link2Off, Square, Zap, Battery, RotateCcw, Dices,
-  LayoutTemplate, X
+  LayoutTemplate, X, ChevronLeft, ChevronRight, Command, Hand
 } from 'lucide-react';
 
 export const Icons = {
@@ -37,5 +37,9 @@ export const Icons = {
   Reset: RotateCcw,
   Random: Dices,
   Aspect: LayoutTemplate,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Keyboard: Command,
+  Hand
 };

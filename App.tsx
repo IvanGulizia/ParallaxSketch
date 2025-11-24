@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { LayerSlider } from './components/LayerSlider';
@@ -8,6 +9,7 @@ import { ToolType, AppState, Stroke, EraserMode, BlendMode, TrajectoryType } fro
 import { v4 as uuidv4 } from 'uuid';
 // @ts-ignore
 import LZString from 'lz-string';
+import { Icons } from './components/Icons';
 
 // Extended Harmonious Palettes
 const PRESET_PALETTES = [
@@ -32,6 +34,48 @@ const PRESET_PALETTES = [
     ['#d8e2dc', '#ffe5d9', '#ffcad4', '#f4acb7', '#9d8189'], // Muted Rose
     ['#03045e', '#023e8a', '#0077b6', '#0096c7', '#00b4d8']  // Ocean
 ];
+
+// Helper Component for Embed Shortcuts Overlay
+const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+        <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 border border-gray-100" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-gray-800">Keyboard Shortcuts</h3>
+                <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><Icons.Close size={20} /></button>
+            </div>
+            
+            <div className="space-y-3 text-sm text-gray-600">
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Previous Palette</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">←</kbd></div>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Next Palette</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">D</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">→</kbd></div>
+                </div>
+                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Focus Layer (Front)</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">↑</kbd></div>
+                </div>
+                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Focus Layer (Back)</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">↓</kbd></div>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Depth of Field</span>
+                    <div className="flex gap-1"><span className="text-xs italic">Shift + Scroll</span></div>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span>Toggle Physics/Eco</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">Space</kbd></div>
+                </div>
+            </div>
+             <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400 text-center">
+                 On mobile, use swipe gestures (Left/Right/Up/Down) or pinch.
+            </div>
+        </div>
+    </div>
+);
 
 export default function App() {
   // Detect Mobile for default settings
@@ -109,6 +153,9 @@ export default function App() {
   const [historyIndex, setHistoryIndex] = useState(0);
   const currentStrokes = history[historyIndex];
 
+  // Embed specific state
+  const [showEmbedShortcuts, setShowEmbedShortcuts] = useState(false);
+
   // Request Gyro Permission helper
   const requestGyroPermission = async () => {
     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
@@ -184,7 +231,7 @@ export default function App() {
       return () => window.removeEventListener('resize', updateSpacing);
   }, [state.uiTheme]);
 
-  // Handle Scroll to Switch Layers
+  // Handle Scroll to Switch Layers (Standard App Mode)
   useEffect(() => {
       const handleWheel = (e: WheelEvent) => {
           if (state.isEmbedMode) return;
@@ -259,6 +306,125 @@ export default function App() {
       }
   };
 
+  // Cycle Palette Helper
+  const handleCyclePalette = (direction: -1 | 1) => {
+     const currentIndex = PRESET_PALETTES.indexOf(state.palette);
+     // If current palette is custom (not in presets), start from 0
+     let nextIndex = 0;
+     if (currentIndex !== -1) {
+         nextIndex = (currentIndex + direction + PRESET_PALETTES.length) % PRESET_PALETTES.length;
+     }
+     setState(s => ({ ...s, palette: PRESET_PALETTES[nextIndex] }));
+  };
+
+  // --- EMBED MODE INTERACTIONS (Shortcuts, Gestures, Hidden Features) ---
+  useEffect(() => {
+      if (!state.isEmbedMode) return;
+
+      // 1. Keyboard Shortcuts
+      const handleKeyDown = (e: KeyboardEvent) => {
+          // Palette (A/D or Arrows)
+          if (e.key === 'a' || e.key === 'ArrowLeft') handleCyclePalette(-1);
+          if (e.key === 'd' || e.key === 'ArrowRight') handleCyclePalette(1);
+          
+          // Focal Layer (W/S or Arrows)
+          if (e.key === 'w' || e.key === 'ArrowUp') {
+              setState(s => ({ ...s, focalLayerIndex: Math.min(4, s.focalLayerIndex + 1) }));
+          }
+          if (e.key === 's' || e.key === 'ArrowDown') {
+               setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
+          }
+
+          // Toggle Eco Mode (Space)
+          if (e.code === 'Space') {
+              setState(s => ({ ...s, isLowPowerMode: !s.isLowPowerMode }));
+          }
+      };
+
+      // 2. Mouse Wheel (Shift + Scroll = Depth of Field)
+      const handleEmbedWheel = (e: WheelEvent) => {
+          if (e.shiftKey) {
+              e.preventDefault();
+              const delta = e.deltaY > 0 ? -1 : 1;
+              setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, s.blurStrength + delta)) }));
+          }
+      };
+
+      // 3. Touch Gestures (Swipe & Pinch)
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let initialPinchDist = 0;
+      let initialBlur = 0;
+
+      const handleTouchStart = (e: TouchEvent) => {
+          if (e.touches.length === 1) {
+             touchStartX = e.touches[0].clientX;
+             touchStartY = e.touches[0].clientY;
+          } else if (e.touches.length === 2) {
+              // Pinch Start
+              initialPinchDist = Math.hypot(
+                  e.touches[0].clientX - e.touches[1].clientX,
+                  e.touches[0].clientY - e.touches[1].clientY
+              );
+              initialBlur = state.blurStrength;
+          }
+      };
+
+      const handleTouchEnd = (e: TouchEvent) => {
+          if (e.changedTouches.length === 1 && initialPinchDist === 0) {
+              const dx = e.changedTouches[0].clientX - touchStartX;
+              const dy = e.changedTouches[0].clientY - touchStartY;
+              
+              // Min swipe distance
+              if (Math.abs(dx) > 50 || Math.abs(dy) > 50) {
+                  if (Math.abs(dx) > Math.abs(dy)) {
+                      // Horizontal Swipe (Palette)
+                      handleCyclePalette(dx > 0 ? 1 : -1);
+                  } else {
+                      // Vertical Swipe (Focus Layer) - Inverted direction natural feel
+                      const dir = dy > 0 ? -1 : 1; 
+                      setState(s => ({ ...s, focalLayerIndex: Math.max(0, Math.min(4, s.focalLayerIndex + dir)) }));
+                  }
+              }
+          }
+          initialPinchDist = 0;
+      };
+      
+      const handleTouchMove = (e: TouchEvent) => {
+          if (e.touches.length === 2 && initialPinchDist > 0) {
+              e.preventDefault(); // Prevent zoom
+              const currentDist = Math.hypot(
+                  e.touches[0].clientX - e.touches[1].clientX,
+                  e.touches[0].clientY - e.touches[1].clientY
+              );
+              const delta = (currentDist - initialPinchDist) / 5; // Sensitivity
+              setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, initialBlur + delta)) }));
+          }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('wheel', handleEmbedWheel, { passive: false });
+      window.addEventListener('touchstart', handleTouchStart);
+      window.addEventListener('touchend', handleTouchEnd);
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+      return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('wheel', handleEmbedWheel);
+          window.removeEventListener('touchstart', handleTouchStart);
+          window.removeEventListener('touchend', handleTouchEnd);
+          window.removeEventListener('touchmove', handleTouchMove);
+      };
+  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength]);
+
+  // Sync Active Layer with Focal Layer in Embed Mode (So you draw where you focus)
+  useEffect(() => {
+      if (state.isEmbedMode) {
+          setState(s => ({ ...s, activeLayer: s.focalLayerIndex }));
+      }
+  }, [state.focalLayerIndex, state.isEmbedMode]);
+
+
   // Initialize based on URL params (Embed Mode)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -266,21 +432,62 @@ export default function App() {
         const isTransparent = params.get('bg') === 'transparent';
         const gyroParam = params.get('gyro');
         
+        // Load extensive params if present
+        const pStrength = params.get('strength');
+        const pInverted = params.get('inverted');
+        const pStiffness = params.get('stiffness');
+        const pDamping = params.get('damping');
+        const pBlur = params.get('blur');
+        const pFocus = params.get('focus');
+        const pFocalLayer = params.get('focalLayer');
+        const pGrid = params.get('grid');
+        const pSnap = params.get('snap');
+        const pGridSize = params.get('gridSize');
+        const pWidth = params.get('width');
+        const pAspect = params.get('aspect');
+        const pGlobalBlend = params.get('globalBlend');
+        const pStrokeColor = params.get('strokeColor'); // Custom stroke color
+
+        // Determine default color slot
+        // -1 indicates "Use explicit white/custom", 0-4 uses palette
+        // Default on desktop is white (-1), mobile uses palette[0] unless specified
+        const isDesktop = !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const defaultColorSlot = pStrokeColor ? -1 : (isDesktop ? -1 : 0);
+
         // Initial Embed State
         setState(s => ({
             ...s,
             isEmbedMode: true,
             isTransparentEmbed: isTransparent,
             isPlaying: true, // Auto play for physics
-            parallaxStrength: parseInt(params.get('strength') || '50'),
-            parallaxInverted: params.get('inverted') === 'true',
+            
+            // Visuals from URL or Defaults
+            parallaxStrength: pStrength ? parseInt(pStrength) : 50,
+            parallaxInverted: pInverted === 'true',
             springConfig: {
-                stiffness: parseFloat(params.get('stiffness') || '0.05'),
-                damping: parseFloat(params.get('damping') || '0.92')
+                stiffness: pStiffness ? parseFloat(pStiffness) : 0.05,
+                damping: pDamping ? parseFloat(pDamping) : 0.92
             },
+            blurStrength: pBlur ? parseInt(pBlur) : 0,
+            focusRange: pFocus ? parseFloat(pFocus) : 0,
+            focalLayerIndex: pFocalLayer ? parseInt(pFocalLayer) : 2,
+            
+            // Grid
+            isGridEnabled: pGrid === 'true',
+            isSnappingEnabled: pSnap === 'true',
+            gridSize: pGridSize ? parseInt(pGridSize) : 40,
+
+            // Layout
+            canvasWidth: pWidth ? parseInt(pWidth) : 100,
+            aspectRatio: pAspect ? parseFloat(pAspect) : null,
+            globalLayerBlendMode: (pGlobalBlend as BlendMode) || 'normal',
+            
             canvasBackgroundColor: isTransparent ? 'transparent' : (params.get('bg') ? '#' + params.get('bg') : '#FFFFFF'),
             useGyroscope: gyroParam === 'true',
-            isLowPowerMode: false
+            isLowPowerMode: true, // Default to Eco in embed to save battery on landing pages
+
+            // Drawing defaults
+            activeColorSlot: defaultColorSlot
         }));
 
         // 0. Check for Direct External URL (e.g. Gist)
@@ -392,15 +599,6 @@ export default function App() {
     const newPalette = [...state.palette];
     newPalette[index] = newColor;
     setState(s => ({ ...s, palette: newPalette }));
-  };
-
-  const handleRandomizePalette = () => {
-      // Ensure we get a different one
-      let newPalette;
-      do {
-          newPalette = PRESET_PALETTES[Math.floor(Math.random() * PRESET_PALETTES.length)];
-      } while (newPalette === state.palette);
-      setState(s => ({ ...s, palette: newPalette }));
   };
 
   const handleColorPick = (slotIndex: number) => {
@@ -524,6 +722,10 @@ export default function App() {
         style={{ backgroundColor: state.isTransparentEmbed ? 'transparent' : undefined }}
     >
       
+      {state.isEmbedMode && showEmbedShortcuts && (
+          <ShortcutsOverlay onClose={() => setShowEmbedShortcuts(false)} />
+      )}
+
       {/* Top Toolbar Area */}
       {!state.isEmbedMode && (
         <div className="w-full h-20 flex items-end justify-center pb-4 shrink-0 z-50">
@@ -558,7 +760,7 @@ export default function App() {
                     }
                 }}
                 onPaletteChange={handlePaletteChange}
-                onRandomizePalette={handleRandomizePalette}
+                onCyclePalette={handleCyclePalette}
                 onBlendModeChange={(mode, isFill) => {
                     if (isFill) setState(s => ({ ...s, activeFillBlendMode: mode }));
                     else setState(s => ({ ...s, activeBlendMode: mode }));
@@ -630,6 +832,8 @@ export default function App() {
                     onExportComplete={() => setState(s => ({ ...s, exportConfig: { ...s.exportConfig, isRecording: false } }))}
                     onStopPreview={() => setState(s => ({ ...s, exportConfig: { ...s.exportConfig, isActive: false, isRecording: false } }))}
                     onColorPick={handleColorPick}
+                    isEmbedMode={state.isEmbedMode}
+                    onEmbedContextMenu={() => setShowEmbedShortcuts(true)}
                 />
             </div>
             
