@@ -6,7 +6,7 @@ import {
   Layers, MoveHorizontal, Undo2, Redo2, Trash2, XCircle,
   Menu, Download, Upload, PaintBucket, Shuffle, Share2, Link,
   Link2, Link2Off, Square, Zap, Battery, RotateCcw, Dices,
-  LayoutTemplate, X, ChevronLeft, ChevronRight, Command, Hand
+  LayoutTemplate, X, ChevronLeft, ChevronRight, Command, Hand, Palette
 } from 'lucide-react';
 
 export const Icons = {
@@ -41,5 +41,6 @@ export const Icons = {
   ChevronLeft,
   ChevronRight,
   Keyboard: Command,
-  Hand
+  Hand,
+  Palette
 };

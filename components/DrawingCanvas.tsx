@@ -1,5 +1,3 @@
-
-
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { ToolType, Point, Stroke, EraserMode, SpringConfig, BlendMode, ExportConfig, TrajectoryType } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -96,6 +94,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   
   // Interaction
   const isDrawing = useRef(false);
+  const isDraggingView = useRef(false); // For embed mode Look around
   const currentStrokePoints = useRef<Point[]>([]);
   const [selectedStrokeId, setSelectedStrokeId] = useState<string | null>(null);
   const isDraggingSelection = useRef(false);
@@ -335,6 +334,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       // If using gyroscope, auto-export, or playing, ignore mouse for parallax
+      // UNLESS we are in embed mode and manually dragging view, handled separately
       if ((isPlaying && useGyroscope) || exportConfig?.isActive) return; 
 
       if (!containerRef.current) return;
@@ -343,7 +343,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       const y = ((e.clientY - top) / height) * 2 - 1;
       
       // Update target, always. Smoothing happens in the loop.
-      targetOffset.current = { x, y };
+      if (!isDraggingView.current) {
+         targetOffset.current = { x, y };
+      }
     };
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
@@ -387,7 +389,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       }
     } else {
         // Reset to center if not interacting
-        if (!isLowPowerMode) targetOffset.current = { x: 0, y: 0 };
+        if (!isLowPowerMode && !isDraggingView.current) targetOffset.current = { x: 0, y: 0 };
     }
 
     return () => {
@@ -602,6 +604,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
               return;
           }
       }
+      // If we didn't pick a color and in embed mode, show custom menu
+      if (isEmbedMode && onEmbedContextMenu) {
+          onEmbedContextMenu();
+      }
   };
 
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
@@ -609,6 +615,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (exportConfig?.isActive) {
         onStopPreview?.();
         return; 
+    }
+    
+    // In Embed Mode, disable drawing and enable "View Dragging"
+    if (isEmbedMode) {
+        isDraggingView.current = true;
+        return;
     }
 
     const pt = getNormalizedLocalPoint(e);
@@ -637,8 +649,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
-    // Special Mobile Embed Case: Simulate Parallax with touch
-    if (isEmbedMode && !useGyroscope && containerRef.current) {
+    // Mobile/Embed Parallax Simulation logic
+    if (isEmbedMode && containerRef.current) {
          let clientX, clientY;
         if ('touches' in e) {
             clientX = e.touches[0].clientX;
@@ -648,12 +660,26 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             clientY = (e as React.MouseEvent).clientY;
         }
         const { width, height, left, top } = containerRef.current.getBoundingClientRect();
-        const x = ((clientX - left) / width) * 2 - 1;
-        const y = ((clientY - top) / height) * 2 - 1;
-        targetOffset.current = { x, y };
+        
+        // If we are dragging (or just moving if desktop embed), update view
+        // On mobile, we require drag (isDraggingView) to avoid conflict with potential other gestures, 
+        // though strictly 'pointermove' implies drag if using Pointer Events, here we use Touch/Mouse.
+        // The simplified logic requested: "Remove drawing with click" -> 1 finger drag looks around.
+        
+        if (isDraggingView.current || !('touches' in e)) { 
+            const x = ((clientX - left) / width) * 2 - 1;
+            const y = ((clientY - top) / height) * 2 - 1;
+            targetOffset.current = { x, y };
+        }
+        
+        // If it's a touch move, don't do drawing logic below
+        if ('touches' in e) return;
     }
 
     if (exportConfig?.isActive) return;
+
+    // Stop if we are just looking around
+    if (isEmbedMode) return;
 
     const pt = getNormalizedLocalPoint(e);
 
@@ -693,7 +719,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   };
 
   const handlePointerUp = () => {
-    if (exportConfig?.isActive) return;
+    if (isDraggingView.current) {
+        isDraggingView.current = false;
+        return;
+    }
+
+    if (exportConfig?.isActive || isEmbedMode) return;
 
     if (activeTool === ToolType.SELECT) {
         isDraggingSelection.current = false;

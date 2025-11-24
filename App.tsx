@@ -58,27 +58,37 @@ const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
                     <div className="flex gap-1"><span className="text-xs italic">Right Click on Stroke</span></div>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Previous Palette</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">←</kbd></div>
+                    <span>Toggle Gyro / Motion</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <span className="text-xs italic">Swipe Left</span></div>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Next Palette</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">D</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">→</kbd></div>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">D</kbd> or <span className="text-xs italic">Swipe Right</span></div>
                 </div>
                  <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Focus Layer (Front)</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">↑</kbd></div>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> or <span className="text-xs italic">Swipe Up</span></div>
                 </div>
                  <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Focus Layer (Back)</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> or <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">↓</kbd></div>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> or <span className="text-xs italic">Swipe Down</span></div>
                 </div>
                 <div className="flex justify-between items-center">
                     <span>Depth of Field</span>
-                    <div className="flex gap-1"><span className="text-xs italic">Shift + Scroll</span></div>
+                    <div className="flex gap-1"><span className="text-xs italic">Shift + Scroll</span> or <span className="text-xs italic">Pinch</span></div>
                 </div>
             </div>
         </div>
+    </div>
+);
+
+// Start Overlay for Mobile Embed (Gyro Permission)
+const StartOverlay = ({ onStart }: { onStart: () => void }) => (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] cursor-pointer" onClick={onStart}>
+         <div className="bg-white/90 rounded-full px-8 py-3 shadow-xl flex items-center gap-3 animate-pulse">
+            <Icons.Hand size={24} className="text-[var(--active-color)]" />
+            <span className="font-semibold text-[var(--text-color)]">Tap to Explore</span>
+         </div>
     </div>
 );
 
@@ -160,6 +170,7 @@ export default function App() {
 
   // Embed specific state
   const [showEmbedShortcuts, setShowEmbedShortcuts] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   // Request Gyro Permission helper
   const requestGyroPermission = async () => {
@@ -175,6 +186,15 @@ export default function App() {
         return false;
     }
     return true; // No permission needed on Android/Desktop usually
+  };
+
+  const handleStartInteraction = async () => {
+    if (state.useGyroscope && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+            await (DeviceOrientationEvent as any).requestPermission();
+        } catch (e) {}
+    }
+    setHasInteracted(true);
   };
 
   // Apply UI Theme CSS Variables & Layout Spacing
@@ -355,9 +375,13 @@ export default function App() {
 
       // 1. Keyboard Shortcuts
       const handleKeyDown = (e: KeyboardEvent) => {
-          // Palette (A/D or Arrows)
-          if (e.key === 'a' || e.key === 'ArrowLeft') handleCyclePalette(-1);
+          // Palette Next (D/ArrowRight)
           if (e.key === 'd' || e.key === 'ArrowRight') handleCyclePalette(1);
+
+          // NEW: A/ArrowLeft = Toggle Gyro/Motion (was Prev Palette)
+          if (e.key === 'a' || e.key === 'ArrowLeft') {
+              setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
+          }
           
           // Focal Layer (W/S or Arrows)
           if (e.key === 'w' || e.key === 'ArrowUp') {
@@ -383,65 +407,68 @@ export default function App() {
       const handleEmbedWheel = (e: WheelEvent) => {
           if (e.shiftKey) {
               e.preventDefault();
-              // Normalize delta for different input devices (trackpad vs mouse)
               const sign = Math.sign(e.deltaY); 
-              // Mouse wheel down (positive) -> decrease blur (closer focus feel)
-              // Mouse wheel up (negative) -> increase blur
               const delta = sign > 0 ? -1 : 1; 
-              
               setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, s.blurStrength + delta)) }));
           }
       };
 
-      // 3. Touch Gestures (Swipe & Pinch)
-      let touchStartX = 0;
-      let touchStartY = 0;
+      // 3. Touch Gestures (Pinch for Depth of Field + Swipe)
       let initialPinchDist = 0;
       let initialBlur = 0;
+      let touchStartX = 0;
+      let touchStartY = 0;
 
       const handleTouchStart = (e: TouchEvent) => {
-          if (e.touches.length === 1) {
-             touchStartX = e.touches[0].clientX;
-             touchStartY = e.touches[0].clientY;
-          } else if (e.touches.length === 2) {
+          if (e.touches.length === 2) {
               // Pinch Start
               initialPinchDist = Math.hypot(
                   e.touches[0].clientX - e.touches[1].clientX,
                   e.touches[0].clientY - e.touches[1].clientY
               );
               initialBlur = state.blurStrength;
+          } else if (e.touches.length === 1) {
+              touchStartX = e.touches[0].clientX;
+              touchStartY = e.touches[0].clientY;
           }
       };
 
       const handleTouchEnd = (e: TouchEvent) => {
-          if (e.changedTouches.length === 1 && initialPinchDist === 0) {
-              const dx = e.changedTouches[0].clientX - touchStartX;
-              const dy = e.changedTouches[0].clientY - touchStartY;
-              
-              // Min swipe distance
-              if (Math.abs(dx) > 50 || Math.abs(dy) > 50) {
-                  if (Math.abs(dx) > Math.abs(dy)) {
-                      // Horizontal Swipe (Palette)
-                      handleCyclePalette(dx > 0 ? 1 : -1);
-                  } else {
-                      // Vertical Swipe (Focus Layer) - Inverted direction natural feel
-                      const dir = dy > 0 ? -1 : 1; 
-                      setState(s => ({ ...s, focalLayerIndex: Math.max(0, Math.min(4, s.focalLayerIndex + dir)) }));
-                  }
-              }
-          }
           initialPinchDist = 0;
+          
+          // Swipe Detection Logic (One finger)
+          // We check changedTouches because e.touches is empty on end
+          if (e.changedTouches.length === 1) {
+             const touchEndX = e.changedTouches[0].clientX;
+             const touchEndY = e.changedTouches[0].clientY;
+             
+             const dx = touchEndX - touchStartX;
+             const dy = touchEndY - touchStartY;
+             
+             // Threshold for Swipe
+             if (Math.abs(dx) > 100 && Math.abs(dy) < 60) {
+                 if (dx > 0) {
+                     // Swipe Right -> Next Palette
+                     handleCyclePalette(1);
+                 } else {
+                     // Swipe Left -> Toggle Gyro
+                     setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
+                 }
+             }
+             // Swipe Up/Down could be focal layer if needed, but keeping it simple as requested
+          }
       };
       
       const handleTouchMove = (e: TouchEvent) => {
           if (e.touches.length === 2 && initialPinchDist > 0) {
-              e.preventDefault(); // Prevent zoom
+              e.preventDefault(); 
               const currentDist = Math.hypot(
                   e.touches[0].clientX - e.touches[1].clientX,
                   e.touches[0].clientY - e.touches[1].clientY
               );
-              const delta = (currentDist - initialPinchDist) / 5; // Sensitivity
-              setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, initialBlur + delta)) }));
+              const delta = (currentDist - initialPinchDist) / 10; 
+              const newBlur = initialBlur - delta;
+              setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, newBlur)) }));
           }
       };
 
@@ -458,9 +485,9 @@ export default function App() {
           window.removeEventListener('touchend', handleTouchEnd);
           window.removeEventListener('touchmove', handleTouchMove);
       };
-  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, currentStrokes]); // Added strokes to dependency for export callback freshness
+  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, currentStrokes]);
 
-  // Sync Active Layer with Focal Layer in Embed Mode (So you draw where you focus)
+  // Sync Active Layer with Focal Layer in Embed Mode
   useEffect(() => {
       if (state.isEmbedMode) {
           setState(s => ({ ...s, activeLayer: s.focalLayerIndex }));
@@ -475,6 +502,9 @@ export default function App() {
         const isTransparent = params.get('bg') === 'transparent';
         const gyroParam = params.get('gyro');
         
+        // Detect mobile inside embed initialization to force gyro defaults
+        const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
         // Load extensive params if present
         const pStrength = params.get('strength');
         const pInverted = params.get('inverted');
@@ -491,11 +521,7 @@ export default function App() {
         const pGlobalBlend = params.get('globalBlend');
         const pStrokeColor = params.get('strokeColor'); // Custom stroke color
 
-        // Determine default color slot
-        // -1 indicates "Use explicit white/custom", 0-4 uses palette
-        // Default on desktop is white (-1), mobile uses palette[0] unless specified
-        const isDesktop = !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const defaultColorSlot = pStrokeColor ? -1 : (isDesktop ? -1 : 0);
+        const defaultColorSlot = pStrokeColor ? -1 : (isMobileDevice ? 0 : -1);
 
         // Initial Embed State
         setState(s => ({
@@ -526,8 +552,10 @@ export default function App() {
             globalLayerBlendMode: (pGlobalBlend as BlendMode) || 'normal',
             
             canvasBackgroundColor: isTransparent ? 'transparent' : (params.get('bg') ? '#' + params.get('bg') : '#FFFFFF'),
-            useGyroscope: gyroParam === 'true',
-            isLowPowerMode: true, // Default to Eco in embed to save battery on landing pages
+            
+            // Gyro: Default to true on Mobile unless explicitly disabled
+            useGyroscope: isMobileDevice, 
+            isLowPowerMode: true, // Default to Eco in embed
 
             // Drawing defaults
             activeColorSlot: defaultColorSlot
@@ -738,6 +766,11 @@ export default function App() {
         style={{ backgroundColor: state.isTransparentEmbed ? 'transparent' : undefined }}
     >
       
+      {/* Mobile Embed Start Overlay for Permission */}
+      {state.isEmbedMode && isMobile && !hasInteracted && (
+          <StartOverlay onStart={handleStartInteraction} />
+      )}
+
       {state.isEmbedMode && showEmbedShortcuts && (
           <ShortcutsOverlay onClose={() => setShowEmbedShortcuts(false)} />
       )}

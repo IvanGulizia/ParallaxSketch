@@ -197,14 +197,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                             <>
                                 <div className={`flex gap-2 justify-center flex-wrap items-center transition-opacity duration-200 ${isEditingFill && isColorSynced ? 'opacity-50 pointer-events-none grayscale' : 'opacity-100'}`}>
                                     
-                                    {/* Palette Prev */}
-                                    <button
-                                        onClick={() => onCyclePalette(-1)}
-                                        className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-black transition-colors"
-                                    >
-                                        <Icons.ChevronLeft size={14} />
-                                    </button>
-
                                     {palette.map((color, index) => {
                                         const isActive = isEditingFill 
                                             ? activeSecondaryColorSlot === index 
@@ -237,12 +229,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                                         )
                                     })}
                                     
-                                    {/* Palette Next */}
+                                    {/* Palette Next (Shuffle) */}
                                     <button
                                         onClick={() => onCyclePalette(1)}
-                                        className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-black transition-colors"
+                                        className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-black transition-colors ml-1"
+                                        title="Next Palette"
                                     >
-                                        <Icons.ChevronRight size={14} />
+                                        <Icons.Shuffle size={14} />
                                     </button>
                                 </div>
                             </>
