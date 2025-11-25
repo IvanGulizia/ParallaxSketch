@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
-import { ToolType, Point, Stroke, EraserMode, SpringConfig, BlendMode, ExportConfig, TrajectoryType } from '../types';
+import { ToolType, Point, Stroke, EraserMode, SpringConfig, BlendMode, ExportConfig, TrajectoryType, SymmetryMode } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DrawingCanvasProps {
@@ -26,13 +26,15 @@ interface DrawingCanvasProps {
   isGridEnabled: boolean;
   isSnappingEnabled: boolean;
   gridSize: number;
+  symmetryMode: SymmetryMode;
   useGyroscope: boolean;
   isLowPowerMode: boolean;
   isOnionSkinEnabled: boolean;
   blurStrength: number;
   focusRange: number; 
   exportConfig?: ExportConfig;
-  onStrokesChange: (strokes: Stroke[]) => void;
+  onStrokesChange: (strokes: Stroke[]) => void; // Updates visual state
+  onStrokeCommit: (strokes: Stroke[]) => void; // Updates history (Undo/Redo)
   onExportComplete?: () => void;
   onStopPreview?: () => void;
   onColorPick?: (colorSlot: number) => void;
@@ -68,6 +70,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   isGridEnabled,
   isSnappingEnabled,
   gridSize,
+  symmetryMode,
   useGyroscope,
   isLowPowerMode,
   isOnionSkinEnabled,
@@ -75,6 +78,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   focusRange,
   exportConfig,
   onStrokesChange,
+  onStrokeCommit,
   onExportComplete,
   onStopPreview,
   onColorPick,
@@ -160,6 +164,30 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Render Symmetry Guides (only on Active Layer and if active)
+    if (layerIndex === activeLayer && symmetryMode !== SymmetryMode.NONE && !isEmbedMode && !exportConfig?.isActive && !isPlaying) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 1;
+        
+        const centerX = fullWidth / 2;
+        const centerY = fullHeight / 2;
+
+        if (symmetryMode === SymmetryMode.HORIZONTAL || symmetryMode === SymmetryMode.QUAD) {
+            ctx.moveTo(centerX, 0);
+            ctx.lineTo(centerX, fullHeight);
+        }
+        if (symmetryMode === SymmetryMode.VERTICAL || symmetryMode === SymmetryMode.QUAD) {
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(fullWidth, centerY);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
     const layerStrokes = strokes.filter(s => s.layerId === layerIndex);
 
     layerStrokes.forEach(stroke => {
@@ -236,11 +264,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     // Notify render
     setRenderVersion(v => v + 1);
-  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode]);
+  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode, symmetryMode, activeLayer, isEmbedMode, exportConfig, isPlaying]);
 
   useEffect(() => {
     [0, 1, 2, 3, 4].forEach(renderLayer);
-  }, [strokes, renderLayer, selectedStrokeId, dimensions, palette]);
+  }, [strokes, renderLayer, selectedStrokeId, dimensions, palette, symmetryMode]);
 
   // Apply Transform Helper
   const applyParallaxTransforms = (offsetX: number, offsetY: number) => {
@@ -382,6 +410,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         x = Math.max(-1, Math.min(1, x));
         y = Math.max(-1, Math.min(1, y));
         
+        // In Landscape, X and Y are swapped/inverted relative to portrait
+        if (angle === 90) { x = -x; y = -y; }
+        if (angle === -90) { x = -x; y = -y; }
+
         targetOffset.current = { x, y };
     }
 
@@ -468,7 +500,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             nextY += velocity.current.y;
         } else {
             // "Slight Damping" via simple Lerp for Eco Mode
-            // This answers the user request for slight smoothing without full physics
             const lerpFactor = 0.15;
             nextX += (targetOffset.current.x - nextX) * lerpFactor;
             nextY += (targetOffset.current.y - nextY) * lerpFactor;
@@ -505,8 +536,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                 const drawX = (dimensions.width - source.width) / 2 + offX;
                 const drawY = (dimensions.height - source.height) / 2 + offY;
 
-                const dist = Math.abs(index - focalLayerIndex);
-                const effectiveBlur = Math.max(0, dist - focusRange) * blurStrength;
+                let effectiveBlur = 0;
+                // Negative range = uniform blur
+                if (focusRange < 0) {
+                    effectiveBlur = blurStrength;
+                } else {
+                    const dist = Math.abs(index - focalLayerIndex);
+                    effectiveBlur = Math.max(0, dist - focusRange) * blurStrength;
+                }
 
                 ctx.save();
                 if (effectiveBlur > 0) {
@@ -527,7 +564,6 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         }
     }
 
-    // Always run loop now to support the "Slight Damping" lerp in Eco Mode
     requestRef.current = requestAnimationFrame(animationLoop);
   };
 
@@ -562,7 +598,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     let x = (clientX - rect.left) - offsetX;
     let y = (clientY - rect.top) - offsetY;
     
-    // Snapping Logic (only if not overriding layer for global hit test)
+    // Snapping Logic
     if (overrideLayerId === undefined && isGridEnabled && isSnappingEnabled) {
         const snap = (val: number) => Math.round(val / gridSize) * gridSize;
         x = snap(x);
@@ -595,10 +631,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation(); // Ensure parent doesn't see it
 
       if (exportConfig?.isActive) return;
 
-      // Always perform global color pick on right click, regardless of mode
+      // Always perform global color pick on right click
       for (const layerId of [4, 3, 2, 1, 0]) {
           const pt = getNormalizedLocalPoint(e, layerId);
           const hitStroke = hitTest(pt, layerId);
@@ -607,21 +644,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
               return;
           }
       }
-      // If we didn't pick a color and in embed mode, show custom menu
-      if (isEmbedMode && onEmbedContextMenu) {
-          onEmbedContextMenu();
-      }
   };
 
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
-    // If previewing/exporting, a click stops the preview
     if (exportConfig?.isActive) {
         onStopPreview?.();
         return; 
     }
     
-    // In Embed Mode MOBILE, disable drawing and enable "View Dragging"
-    // In Embed Mode DESKTOP, allow drawing
     if (isEmbedMode && isMobile) {
         isDraggingView.current = true;
         return;
@@ -642,7 +672,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (activeTool === ToolType.ERASER && eraserMode === EraserMode.STROKE) {
         const hit = hitTest(pt, activeLayer);
         if (hit) {
-            onStrokesChange(strokes.filter(s => s.id !== hit.id));
+            onStrokeCommit(strokes.filter(s => s.id !== hit.id));
         }
         return;
     }
@@ -652,8 +682,28 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     setSelectedStrokeId(null);
   };
 
+  const generateSymmetryStrokes = (baseStroke: Stroke): Stroke[] => {
+      if (symmetryMode === SymmetryMode.NONE) return [baseStroke];
+
+      const strokes: Stroke[] = [baseStroke];
+      const newPoints = baseStroke.points;
+
+      if (symmetryMode === SymmetryMode.HORIZONTAL || symmetryMode === SymmetryMode.QUAD) {
+          const hPoints = newPoints.map(p => ({ x: 1 - p.x, y: p.y }));
+          strokes.push({ ...baseStroke, id: baseStroke.id + '_h', points: hPoints });
+      }
+      if (symmetryMode === SymmetryMode.VERTICAL || symmetryMode === SymmetryMode.QUAD) {
+          const vPoints = newPoints.map(p => ({ x: p.x, y: 1 - p.y }));
+          strokes.push({ ...baseStroke, id: baseStroke.id + '_v', points: vPoints });
+      }
+      if (symmetryMode === SymmetryMode.QUAD) {
+          const qPoints = newPoints.map(p => ({ x: 1 - p.x, y: 1 - p.y }));
+          strokes.push({ ...baseStroke, id: baseStroke.id + '_q', points: qPoints });
+      }
+      return strokes;
+  };
+
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
-    // Mobile/Embed Parallax Simulation logic
     if (isEmbedMode && containerRef.current) {
          let clientX, clientY;
         if ('touches' in e) {
@@ -665,22 +715,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         }
         const { width, height, left, top } = containerRef.current.getBoundingClientRect();
         
-        // Only update View Target if we are in "Look Around" mode (Mobile Embed)
-        // OR if it's desktop embed (hover parallax)
-        
         if (isDraggingView.current || (!('touches' in e) && isEmbedMode)) { 
             const x = ((clientX - left) / width) * 2 - 1;
             const y = ((clientY - top) / height) * 2 - 1;
             targetOffset.current = { x, y };
         }
         
-        // If it's a touch move in embed mode (and mobile), stop here (no drawing)
         if (isEmbedMode && isMobile && 'touches' in e) return;
     }
 
     if (exportConfig?.isActive) return;
-
-    // Stop if we are just looking around
     if (isDraggingView.current) return;
 
     const pt = getNormalizedLocalPoint(e);
@@ -696,15 +740,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             return s;
         });
         dragStartPos.current = pt;
-        onStrokesChange(newStrokes);
+        onStrokesChange(newStrokes); // Update visual
         return;
     }
 
     if (!isDrawing.current) return;
 
     currentStrokePoints.current.push(pt);
-    // Real-time update for smoothness
-    const currentStroke: Stroke = {
+    
+    // Create transient stroke object
+    const baseStroke: Stroke = {
       id: 'current',
       points: currentStrokePoints.current,
       colorSlot: activeColorSlot,
@@ -717,7 +762,13 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       fillBlendMode: activeFillBlendMode,
       isStrokeEnabled: isStrokeEnabled
     };
-    onStrokesChange([...strokes.filter(s => s.id !== 'current'), currentStroke]);
+
+    // Generate mirrored strokes for preview if symmetry is active
+    const allNewStrokes = generateSymmetryStrokes(baseStroke);
+    
+    // IMPORTANT: onStrokesChange DOES NOT save to history, just updates the render state
+    const otherStrokes = strokes.filter(s => !s.id.startsWith('current'));
+    onStrokesChange([...otherStrokes, ...allNewStrokes]);
   };
 
   const handlePointerUp = () => {
@@ -729,15 +780,18 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (exportConfig?.isActive || (isEmbedMode && isMobile)) return;
 
     if (activeTool === ToolType.SELECT) {
-        isDraggingSelection.current = false;
+        if (isDraggingSelection.current) {
+            isDraggingSelection.current = false;
+            // Commit movement to history
+            onStrokeCommit(strokes); 
+        }
         return;
     }
 
     if (!isDrawing.current) return;
     isDrawing.current = false;
     
-    // Finalize stroke
-    const finalStroke: Stroke = {
+    const baseStroke: Stroke = {
       id: uuidv4(),
       points: currentStrokePoints.current,
       colorSlot: activeColorSlot,
@@ -751,7 +805,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       isStrokeEnabled: isStrokeEnabled
     };
     
-    onStrokesChange([...strokes.filter(s => s.id !== 'current'), finalStroke]);
+    const allNewStrokes = generateSymmetryStrokes(baseStroke);
+    const otherStrokes = strokes.filter(s => !s.id.startsWith('current'));
+    
+    // Commit final strokes to history
+    onStrokeCommit([...otherStrokes, ...allNewStrokes]);
     currentStrokePoints.current = [];
   };
 
@@ -774,11 +832,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     >
        {/* 5 Layers of Offscreen Rendered Canvas, manipulated by CSS Transforms */}
        {[0, 1, 2, 3, 4].map(layerIndex => {
-           // Calculate Blur
-           const dist = Math.abs(layerIndex - focalLayerIndex);
-           const effectiveBlur = Math.max(0, dist - focusRange) * blurStrength;
+           let effectiveBlur = 0;
+           // Handle Blur Logic: Negative focusRange = Uniform Blur
+           if (focusRange < 0) {
+               effectiveBlur = blurStrength;
+           } else {
+               const dist = Math.abs(layerIndex - focalLayerIndex);
+               effectiveBlur = Math.max(0, dist - focusRange) * blurStrength;
+           }
            
-           // Check if onion skin should be active (not during play/export)
            const showOnion = isOnionSkinEnabled && !isPlaying && !exportConfig?.isActive;
 
            return (
@@ -787,9 +849,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                 className="layer-canvas absolute left-1/2 top-1/2 w-full h-full pointer-events-none will-change-transform"
                 style={{ 
                     zIndex: layerIndex,
-                    // Onion skin opacity OR 1 if disabled
                     opacity: showOnion ? (layerIndex === activeLayer ? 1 : 0.6) : 1,
-                    // Apply blur here
                     filter: `blur(${effectiveBlur}px) ${showOnion && layerIndex !== activeLayer ? 'grayscale(30%)' : ''}`,
                     transition: 'opacity 0.2s, filter 0.2s',
                     mixBlendMode: layerBlendModes[layerIndex] !== 'normal' 

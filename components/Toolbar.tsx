@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Icons } from './Icons';
 import { ToolType, EraserMode, BlendMode } from '../types';
@@ -268,7 +267,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
              {showSizePicker && activeTool === ToolType.BRUSH && (
                 <div className={`${popupClass} rounded-full p-3 px-4 flex-row items-center gap-3`}>
-                    {[5, 15, 30].map((size) => (
+                    {[2, 6, 12, 24, 40].map((size) => (
                         <button
                             key={size}
                             onClick={() => {
@@ -276,7 +275,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                                 setShowSizePicker(false);
                             }}
                             className={`rounded-full bg-[var(--text-color)] transition-all hover:opacity-80 ${brushSize === size ? 'ring-2 ring-offset-1 ring-[var(--active-color)]' : ''}`}
-                            style={{ width: size < 10 ? 8 : size < 20 ? 12 : 16, height: size < 10 ? 8 : size < 20 ? 12 : 16 }}
+                            style={{ width: size < 10 ? 8 : size < 20 ? 12 : size < 30 ? 16 : 20, height: size < 10 ? 8 : size < 20 ? 12 : size < 30 ? 16 : 20 }}
                         />
                     ))}
                 </div>

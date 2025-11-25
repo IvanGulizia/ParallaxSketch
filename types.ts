@@ -10,6 +10,13 @@ export enum EraserMode {
   STROKE = 'STROKE' // Erase whole stroke
 }
 
+export enum SymmetryMode {
+  NONE = 'NONE',
+  HORIZONTAL = 'HORIZONTAL', // Mirror Left/Right
+  VERTICAL = 'VERTICAL',     // Mirror Top/Bottom
+  QUAD = 'QUAD'              // Mirror Both
+}
+
 export interface Point {
   x: number;
   y: number;
@@ -101,6 +108,7 @@ export interface AppState {
   isGridEnabled: boolean;
   isSnappingEnabled: boolean;
   gridSize: number; // 10 to 100
+  symmetryMode: SymmetryMode; // New
 
   // Visual Settings
   isOnionSkinEnabled: boolean; // New: Depth based opacity

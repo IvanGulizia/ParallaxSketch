@@ -1,8 +1,7 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Icons } from './Icons';
-import { SpringConfig, UITheme, BlendMode, ExportConfig, TrajectoryType, ExportFormat } from '../types';
+import { SpringConfig, UITheme, BlendMode, ExportConfig, TrajectoryType, ExportFormat, SymmetryMode } from '../types';
 import { Slider } from './Slider';
 // @ts-ignore
 import LZString from 'lz-string';
@@ -71,6 +70,7 @@ interface MenuOverlayProps {
   isGridEnabled: boolean;
   isSnappingEnabled: boolean;
   gridSize: number;
+  symmetryMode: SymmetryMode;
   useGyroscope: boolean;
   isLowPowerMode: boolean;
   isOnionSkinEnabled: boolean;
@@ -95,6 +95,7 @@ interface MenuOverlayProps {
   onGridEnabledChange: (val: boolean) => void;
   onSnappingEnabledChange: (val: boolean) => void;
   onGridSizeChange: (val: number) => void;
+  onSymmetryModeChange: (val: SymmetryMode) => void;
   onUseGyroscopeChange: (val: boolean) => void;
   onLowPowerModeChange: (val: boolean) => void;
   onOnionSkinEnabledChange: (val: boolean) => void;
@@ -119,6 +120,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     isGridEnabled,
     isSnappingEnabled,
     gridSize,
+    symmetryMode,
     useGyroscope,
     isLowPowerMode,
     isOnionSkinEnabled,
@@ -143,6 +145,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     onGridEnabledChange,
     onSnappingEnabledChange,
     onGridSizeChange,
+    onSymmetryModeChange,
     onUseGyroscopeChange,
     onLowPowerModeChange,
     onOnionSkinEnabledChange,
@@ -152,23 +155,16 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 }) => {
   const [showShare, setShowShare] = useState(false);
   const [shareTransparent, setShareTransparent] = useState(false);
-  
-  // Export Studio State
   const [showExportStudio, setShowExportStudio] = useState(false);
-
-  // External Link Generator
   const [externalUrlInput, setExternalUrlInput] = useState('');
   const [generatedExternalLink, setGeneratedExternalLink] = useState('');
 
   const menuRef = useRef<HTMLDivElement>(null);
   const shareSectionRef = useRef<HTMLDivElement>(null);
 
-  // Close on click outside
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
-          if ((event.target as HTMLElement).closest('.menu-toggle-btn')) {
-              return;
-          }
+          if ((event.target as HTMLElement).closest('.menu-toggle-btn')) return;
           if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
               if (isOpen) onClose();
           }
@@ -177,7 +173,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
   
-  // Auto scroll to share section
   useEffect(() => {
       if (showShare && shareSectionRef.current) {
           setTimeout(() => {
@@ -208,23 +203,14 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
   
   const generateExternalLink = () => {
       if (!externalUrlInput) return;
-      
       let finalUrl = externalUrlInput;
-
-      // Gist Helper: Convert standard gist links to raw content links automatically
-      // https://gist.github.com/User/Hash -> https://gist.githubusercontent.com/User/Hash/raw
       if (finalUrl.includes('gist.github.com') && !finalUrl.includes('raw')) {
          finalUrl = finalUrl.replace('gist.github.com', 'gist.githubusercontent.com') + '/raw';
       }
-
-      // Check origin
       const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
       const url = new URL(origin + window.location.pathname);
-      
       url.searchParams.set('mode', 'embed');
-      url.searchParams.set('url', finalUrl); // The fetcher in App.tsx will handle the decoding
-      
-      // -- Explicitly include ALL parameters as requested --
+      url.searchParams.set('url', finalUrl);
       
       // Visuals
       url.searchParams.set('strength', parallaxStrength.toString());
@@ -235,11 +221,12 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       url.searchParams.set('focus', focusRange.toString());
       url.searchParams.set('focalLayer', focalLayerIndex.toString());
       
-      // Grid & Canvas
+      // Grid & Canvas & Symmetry
       url.searchParams.set('grid', isGridEnabled.toString());
       url.searchParams.set('snap', isSnappingEnabled.toString());
       url.searchParams.set('gridSize', gridSize.toString());
       url.searchParams.set('width', canvasWidth.toString());
+      url.searchParams.set('symmetry', symmetryMode);
       if (aspectRatio) url.searchParams.set('aspect', aspectRatio.toString());
 
       // Blends
@@ -267,7 +254,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
             right: 'calc(var(--spacing-x) * 0.5)'
         }} 
     >
-      {/* Header */}
       <div className="px-6 py-4 flex items-center justify-between bg-[var(--tool-bg)] border-b border-[var(--border-color)] shrink-0 rounded-t-3xl">
         <h2 className="text-lg font-medium tracking-tight">Settings</h2>
         <button onClick={onClose} className="text-[var(--icon-color)] hover:opacity-70 transition-opacity">
@@ -275,10 +261,8 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
         </button>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-8 custom-scrollbar bg-[var(--menu-bg)]">
         
-        {/* SECTION: CANVAS */}
         <div>
             <SectionTitle>Canvas & Grid</SectionTitle>
             
@@ -328,6 +312,26 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                 
                 <Separator />
                 
+                <ControlRow label="Symmetry">
+                    <div className="flex bg-[var(--button-bg)] rounded-lg p-0.5 border border-[var(--button-border)]">
+                        {[SymmetryMode.NONE, SymmetryMode.HORIZONTAL, SymmetryMode.VERTICAL, SymmetryMode.QUAD].map((mode) => (
+                            <button
+                                key={mode}
+                                onClick={() => onSymmetryModeChange(mode)}
+                                className={`px-2 py-1 rounded-md text-[10px] uppercase font-medium transition-all ${
+                                    symmetryMode === mode 
+                                    ? 'bg-[var(--active-color)] text-white shadow-sm' 
+                                    : 'text-[var(--secondary-text)] hover:text-[var(--text-color)]'
+                                }`}
+                            >
+                                {mode === SymmetryMode.NONE ? 'Off' : mode === SymmetryMode.HORIZONTAL ? 'Hor' : mode === SymmetryMode.VERTICAL ? 'Ver' : 'Quad'}
+                            </button>
+                        ))}
+                    </div>
+                </ControlRow>
+
+                <Separator />
+                
                 <ControlRow label="Depth of Field">
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] text-gray-400 font-medium w-8 text-right">{blurStrength}px</span>
@@ -343,10 +347,10 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 
                 <ControlRow label="Focus Range">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-gray-400 font-medium w-8 text-right">±{focusRange}</span>
+                        <span className="text-[10px] text-gray-400 font-medium w-8 text-right">{focusRange < 0 ? 'All' : `±${focusRange}`}</span>
                          <div className="w-24">
                             <Slider 
-                                min={0} max={2} step={0.5}
+                                min={-1} max={2} step={1}
                                 value={focusRange} 
                                 onChange={onFocusRangeChange}
                             />
@@ -406,7 +410,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
             </div>
         </div>
 
-        {/* SECTION: PHYSICS */}
         <div>
             <SectionTitle>Motion & Physics</SectionTitle>
             
@@ -481,19 +484,15 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
             </div>
         </div>
 
-        {/* SECTION: DATA */}
         <div>
             <SectionTitle>Share & Export</SectionTitle>
             <div className="grid grid-cols-2 gap-3">
-                 
-                 {/* 1. Import */}
                  <label className="flex flex-col items-center justify-center p-4 rounded-xl bg-[var(--tool-bg)] border border-[var(--border-color)] hover:border-[var(--active-color)] hover:bg-[var(--secondary-bg)] transition-all cursor-pointer group">
                     <Icons.Upload size={20} className="text-[var(--icon-color)] mb-1 group-hover:text-[var(--active-color)]" />
                     <span className="text-[10px] font-medium text-[var(--text-color)]">Import JSON</span>
                     <input type="file" accept=".json" onChange={onImport} className="hidden" />
                  </label>
 
-                 {/* 2. Share Generator */}
                  <button 
                     onClick={() => {
                         setShowShare(!showShare);
@@ -509,7 +508,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     <span className={`text-[10px] font-medium ${showShare ? 'text-white' : 'text-[var(--text-color)]'}`}>Share Link</span>
                  </button>
 
-                 {/* 3. Export JSON */}
                  <button 
                     onClick={onExport}
                     className="flex flex-col items-center justify-center p-4 rounded-xl bg-[var(--tool-bg)] border border-[var(--border-color)] hover:border-[var(--active-color)] hover:bg-[var(--secondary-bg)] transition-all group"
@@ -518,7 +516,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     <span className="text-[10px] font-medium text-[var(--text-color)]">Download JSON</span>
                  </button>
 
-                 {/* 4. Video Export */}
                  <button 
                     onClick={() => {
                         setShowExportStudio(!showExportStudio);
@@ -535,7 +532,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                  </button>
             </div>
             
-            {/* Export Studio Panel */}
             {showExportStudio && (
                  <div className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-4">
                     <div className="space-y-2">
@@ -669,7 +665,6 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 
       </div>
 
-      {/* Footer */}
       <div className="p-4 bg-[var(--tool-bg)] border-t border-[var(--border-color)] text-center shrink-0 rounded-b-3xl">
           <span className="text-[10px] text-[var(--secondary-text)] opacity-60 font-medium">
               vibecoded by <a 

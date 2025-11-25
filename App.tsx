@@ -1,11 +1,10 @@
 
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { LayerSlider } from './components/LayerSlider';
 import { DrawingCanvas } from './components/DrawingCanvas';
 import { MenuOverlay } from './components/MenuOverlay';
-import { ToolType, AppState, Stroke, EraserMode, BlendMode, TrajectoryType } from './types';
+import { ToolType, AppState, Stroke, EraserMode, BlendMode, TrajectoryType, SymmetryMode } from './types';
 import { v4 as uuidv4 } from 'uuid';
 // @ts-ignore
 import LZString from 'lz-string';
@@ -35,47 +34,71 @@ const PRESET_PALETTES = [
     ['#03045e', '#023e8a', '#0077b6', '#0096c7', '#00b4d8']  // Ocean
 ];
 
-// Helper Component for Embed Shortcuts Overlay
-const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
+// Helper Component for Shortcuts Overlay
+const ShortcutsOverlay = ({ onClose, isEmbed }: { onClose: () => void, isEmbed: boolean }) => (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
         <div className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 border border-gray-100" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800">Keyboard Shortcuts</h3>
+                <h3 className="font-bold text-gray-800">Shortcuts</h3>
                 <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><Icons.Close size={20} /></button>
             </div>
             
             <div className="space-y-3 text-sm text-gray-600">
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Menu / Help</span>
+                    <span>Play / Pause</span>
                     <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">Space</kbd></div>
                 </div>
-                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Export JSON</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">E</kbd></div>
-                </div>
+                {isEmbed && (
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span>Menu / Help</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">M</kbd></div>
+                    </div>
+                )}
+                {!isEmbed && (
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span>Export JSON</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">E</kbd></div>
+                    </div>
+                )}
+                {!isEmbed && (
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span>Select Color (1-5)</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">1</kbd>...<kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">5</kbd></div>
+                    </div>
+                )}
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Pick Color</span>
-                    <div className="flex gap-1"><span className="text-xs italic">Right Click on Stroke</span></div>
+                    <div className="flex gap-1"><span className="text-xs italic">Right Click</span></div>
                 </div>
-                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Toggle Gyro / Motion</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <span className="text-xs italic">Double Tap (Mobile)</span></div>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Next Palette</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">D</kbd> or <span className="text-xs italic">Swipe Right</span></div>
+                {isEmbed && (
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span>Toggle Gyro</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <span className="text-xs italic">Double Tap</span></div>
+                    </div>
+                )}
+                {!isEmbed && (
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span>Prev / Next Palette</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> / <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">D</kbd></div>
+                    </div>
+                )}
+                {isEmbed && (
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span>Next Palette</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">D</kbd> or <span className="text-xs italic">Swipe Right</span></div>
+                    </div>
+                )}
+                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                    <span>Focus Layer (Back)</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> {isEmbed && <span>or <span className="text-xs italic">Swipe Up</span></span>}</div>
                 </div>
                  <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Focus Layer (Front)</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> or <span className="text-xs italic">Swipe Up</span></div>
-                </div>
-                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Focus Layer (Back)</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> or <span className="text-xs italic">Swipe Down</span></div>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> {isEmbed && <span>or <span className="text-xs italic">Swipe Down</span></span>}</div>
                 </div>
                 <div className="flex justify-between items-center">
                     <span>Depth of Field</span>
-                    <div className="flex gap-1"><span className="text-xs italic">Shift + Scroll</span> or <span className="text-xs italic">Pinch</span></div>
+                    <div className="flex gap-1"><span className="text-xs italic">Shift + Scroll</span> {isEmbed && <span>or <span className="text-xs italic">Pinch</span></span>}</div>
                 </div>
             </div>
         </div>
@@ -98,23 +121,24 @@ export default function App() {
     isColorSynced: false, 
     isStrokeEnabled: true,
     palette: PRESET_PALETTES[0], 
-    parallaxStrength: 10, // Default 10%
+    parallaxStrength: 10, 
     parallaxInverted: false,
-    springConfig: { stiffness: 0.2, damping: 0.2 }, // Default 20/20
+    springConfig: { stiffness: 0.2, damping: 0.2 }, 
     focalLayerIndex: 2, 
     isPlaying: false,
-    useGyroscope: isMobile, // Default to true on mobile
-    isLowPowerMode: true, // Eco Mode by default
+    useGyroscope: isMobile, 
+    isLowPowerMode: true, 
     eraserMode: EraserMode.STROKE, 
     isMenuOpen: false,
-    canvasBackgroundColor: '#FFFFFF', // Ensures white by default
-    canvasWidth: 100, // Default to 100% to show the 3x layout
-    aspectRatio: null, // null = flexible
+    canvasBackgroundColor: '#FFFFFF',
+    canvasWidth: 100, 
+    aspectRatio: null, 
     
     // Grid
     isGridEnabled: false,
     isSnappingEnabled: true,
     gridSize: 40,
+    symmetryMode: SymmetryMode.NONE, // New
     
     // Visual
     isOnionSkinEnabled: true,
@@ -134,7 +158,7 @@ export default function App() {
         borderColor: "#efeadc",
         buttonBorder: "#efeadc",
         iconColor: "#18284c",
-        sliderTrack: "#d3cdba", // Updated color request
+        sliderTrack: "#d3cdba", 
         sliderFilled: "#97b1fb",
         sliderHandle: "#566fa8",
         disabledColor: "#d4cdb7",
@@ -154,13 +178,22 @@ export default function App() {
     }
   });
 
+  // History now tracks committed states, not visual transient states
   const [history, setHistory] = useState<Stroke[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const currentStrokes = history[historyIndex];
+  
+  // Visual Strokes state (the current strokes being rendered)
+  // This is detached from history to prevent micro-movements from spamming the stack
+  const [currentStrokes, setCurrentStrokes] = useState<Stroke[]>([]);
 
   // Embed specific state
   const [showEmbedShortcuts, setShowEmbedShortcuts] = useState(false);
   const lastTap = useRef<number>(0);
+
+  // Sync history with current strokes on load or undo/redo
+  useEffect(() => {
+      setCurrentStrokes(history[historyIndex]);
+  }, [history, historyIndex]);
 
   // Request Gyro Permission helper
   const requestGyroPermission = async () => {
@@ -177,7 +210,7 @@ export default function App() {
         return false;
     }
     setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
-    return true; // No permission needed on Android/Desktop usually
+    return true; 
   };
 
   // Apply UI Theme CSS Variables & Layout Spacing
@@ -208,7 +241,6 @@ export default function App() {
       window.addEventListener('resize', updateSpacing);
       updateSpacing();
 
-      // Inject Scrollbar Styles
       const styleId = 'theme-scrollbar-style';
       let styleTag = document.getElementById(styleId);
       if (!styleTag) {
@@ -242,12 +274,19 @@ export default function App() {
   // Handle Scroll to Switch Layers (Standard App Mode)
   useEffect(() => {
       const handleWheel = (e: WheelEvent) => {
+          // Shift + Scroll for DoF (Global)
+          if (e.shiftKey) {
+              e.preventDefault();
+              const sign = Math.sign(e.deltaY); 
+              const delta = sign > 0 ? -1 : 1; 
+              setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, s.blurStrength + delta)) }));
+              return;
+          }
+
+          // Normal Layer Scroll (Only if not Embed)
           if (state.isEmbedMode) return;
-          
-          // Allow scrolling only if NOT hovering the menu
           if ((e.target as HTMLElement).closest('.menu-overlay-container')) return;
 
-          // Check if target is inside main area or general body
           e.preventDefault();
           if (Math.abs(e.deltaY) > 10) {
               setState(s => {
@@ -263,11 +302,9 @@ export default function App() {
       return () => window.removeEventListener('wheel', handleWheel);
   }, [state.isMenuOpen, state.isEmbedMode]);
 
-  // Load Data Helper
   const loadData = (data: any, isTransparent: boolean) => {
       if (!data) return;
 
-      // Check if it's the minified format (from cloud or lz-string)
       if (data.s) {
           const reconstructedStrokes: Stroke[] = data.s.map((minStroke: any) => ({
               id: uuidv4(),
@@ -280,7 +317,7 @@ export default function App() {
               isEraser: minStroke.t === 1,
               blendMode: minStroke.bm || 'normal',
               fillBlendMode: minStroke.fbm || 'normal',
-              isStrokeEnabled: true // Default
+              isStrokeEnabled: true
           }));
           setHistory([reconstructedStrokes]);
           setHistoryIndex(0);
@@ -295,11 +332,11 @@ export default function App() {
               focalLayerIndex: data.c.fl ?? s.focalLayerIndex,
               canvasBackgroundColor: isTransparent ? 'transparent' : (data.c.bg ?? s.canvasBackgroundColor),
               blurStrength: data.c.bs ?? s.blurStrength,
-              focusRange: data.c.fr ?? s.focusRange
+              focusRange: data.c.fr ?? s.focusRange,
+              symmetryMode: data.c.sm ?? SymmetryMode.NONE
               }));
           }
       } 
-      // Legacy Format support
       else if (data.strokes) {
           setHistory([data.strokes]);
           setHistoryIndex(0);
@@ -314,10 +351,8 @@ export default function App() {
       }
   };
 
-  // Cycle Palette Helper
   const handleCyclePalette = (direction: -1 | 1) => {
      const currentIndex = PRESET_PALETTES.indexOf(state.palette);
-     // If current palette is custom (not in presets), start from 0
      let nextIndex = 0;
      if (currentIndex !== -1) {
          nextIndex = (currentIndex + direction + PRESET_PALETTES.length) % PRESET_PALETTES.length;
@@ -325,7 +360,6 @@ export default function App() {
      setState(s => ({ ...s, palette: PRESET_PALETTES[nextIndex] }));
   };
   
-  // Import / Export Logic
   const handleExport = () => {
     const data = JSON.stringify({ 
         version: 7,
@@ -341,7 +375,8 @@ export default function App() {
             canvasWidth: state.canvasWidth,
             layerBlendModes: state.layerBlendModes,
             blurStrength: state.blurStrength,
-            focusRange: state.focusRange
+            focusRange: state.focusRange,
+            symmetryMode: state.symmetryMode
         }
     });
     const blob = new Blob([data], { type: 'application/json' });
@@ -352,105 +387,107 @@ export default function App() {
     a.click();
   };
 
-  // --- EMBED MODE INTERACTIONS (Shortcuts, Gestures, Hidden Features) ---
   useEffect(() => {
-      if (!state.isEmbedMode) return;
-
-      // 1. Keyboard Shortcuts
       const handleKeyDown = (e: KeyboardEvent) => {
-          // Palette Next (D/ArrowRight)
-          if (e.key === 'd' || e.key === 'ArrowRight') handleCyclePalette(1);
-
-          // NEW: A/ArrowLeft = Toggle Gyro/Motion (was Prev Palette)
-          if (e.key === 'a' || e.key === 'ArrowLeft') {
-              setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
-          }
+          // Global Shortcuts
           
-          // Focal Layer (W/S or Arrows)
+          // Play / Pause
+          if (e.code === 'Space') {
+              e.preventDefault(); 
+              if (state.isEmbedMode) {
+                  // In embed mode, Space toggles menu if implemented, or play?
+                  // Previous prompt said "Space = menu". Latest says "Space = play/pause"
+                  // But also "m = menu des shortcut"
+                  handleTogglePlay();
+              } else {
+                  handleTogglePlay();
+              }
+          }
+
+          // Focal Layer
           if (e.key === 'w' || e.key === 'ArrowUp') {
-              setState(s => ({ ...s, focalLayerIndex: Math.min(4, s.focalLayerIndex + 1) }));
+              // W/Up = Back (-1)
+              setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
           }
           if (e.key === 's' || e.key === 'ArrowDown') {
-               setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
+               // S/Down = Front (+1)
+               setState(s => ({ ...s, focalLayerIndex: Math.min(4, s.focalLayerIndex + 1) }));
           }
 
-          // Show Menu (Space)
-          if (e.code === 'Space') {
-              e.preventDefault(); // Prevent scrolling
-              setShowEmbedShortcuts(prev => !prev);
+          // Palette
+          if (e.key === 'd' || e.key === 'ArrowRight') handleCyclePalette(1); // Next
+          if (!state.isEmbedMode && (e.key === 'a' || e.key === 'ArrowLeft')) handleCyclePalette(-1); // Prev (Creation Mode)
+
+          // Embed Specific
+          if (state.isEmbedMode) {
+              if (e.key === 'a' || e.key === 'ArrowLeft') {
+                  setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
+              }
+              if (e.key === 'm') {
+                  setShowEmbedShortcuts(prev => !prev);
+              }
+              if (e.key === 'r') {
+                  handleReset();
+              }
           }
-          
-          // Export JSON (e)
-          if (e.key === 'e') {
-              handleExport();
+
+          // Creation Specific
+          if (!state.isEmbedMode) {
+              if (e.key === 'e') {
+                  handleExport();
+              }
+              if (['1','2','3','4','5'].includes(e.key)) {
+                  const index = parseInt(e.key) - 1;
+                  handleColorPick(index);
+              }
           }
       };
 
-      // 2. Mouse Wheel (Shift + Scroll = Depth of Field)
-      const handleEmbedWheel = (e: WheelEvent) => {
-          if (e.shiftKey) {
-              e.preventDefault();
-              const sign = Math.sign(e.deltaY); 
-              const delta = sign > 0 ? -1 : 1; 
-              setState(s => ({ ...s, blurStrength: Math.max(0, Math.min(20, s.blurStrength + delta)) }));
-          }
-      };
-
-      // 3. Touch Gestures (Pinch for Depth of Field + Swipe)
       let initialPinchDist = 0;
       let initialBlur = 0;
       let touchStartX = 0;
       let touchStartY = 0;
 
       const handleTouchStart = (e: TouchEvent) => {
-          if (e.touches.length === 2) {
-              // Pinch Start
-              initialPinchDist = Math.hypot(
-                  e.touches[0].clientX - e.touches[1].clientX,
-                  e.touches[0].clientY - e.touches[1].clientY
-              );
-              initialBlur = state.blurStrength;
-          } else if (e.touches.length === 1) {
-              touchStartX = e.touches[0].clientX;
-              touchStartY = e.touches[0].clientY;
+          if (state.isEmbedMode) {
+              if (e.touches.length === 2) {
+                  initialPinchDist = Math.hypot(
+                      e.touches[0].clientX - e.touches[1].clientX,
+                      e.touches[0].clientY - e.touches[1].clientY
+                  );
+                  initialBlur = state.blurStrength;
+              } else if (e.touches.length === 1) {
+                  touchStartX = e.touches[0].clientX;
+                  touchStartY = e.touches[0].clientY;
+              }
           }
       };
 
       const handleTouchEnd = (e: TouchEvent) => {
-          initialPinchDist = 0;
-          
-          // Double Tap Detection
-          const now = Date.now();
-          if (now - lastTap.current < 300) {
-              // Double tap detected
-              requestGyroPermission();
-          }
-          lastTap.current = now;
+          if (state.isEmbedMode) {
+              initialPinchDist = 0;
+              
+              const now = Date.now();
+              if (now - lastTap.current < 300) {
+                  requestGyroPermission();
+              }
+              lastTap.current = now;
 
-          // Swipe Detection Logic (One finger)
-          // We check changedTouches because e.touches is empty on end
-          if (e.changedTouches.length === 1) {
-             const touchEndX = e.changedTouches[0].clientX;
-             const touchEndY = e.changedTouches[0].clientY;
-             
-             const dx = touchEndX - touchStartX;
-             const dy = touchEndY - touchStartY;
-             
-             // Threshold for Swipe
-             if (Math.abs(dx) > 100 && Math.abs(dy) < 60) {
-                 if (dx > 0) {
-                     // Swipe Right -> Next Palette
-                     handleCyclePalette(1);
-                 } else {
-                     // Swipe Left -> Toggle Gyro
-                     setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
+              if (e.changedTouches.length === 1) {
+                 const touchEndX = e.changedTouches[0].clientX;
+                 const touchEndY = e.changedTouches[0].clientY;
+                 const dx = touchEndX - touchStartX;
+                 const dy = touchEndY - touchStartY;
+                 if (Math.abs(dx) > 100 && Math.abs(dy) < 60) {
+                     if (dx > 0) handleCyclePalette(1);
+                     else setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
                  }
-             }
+              }
           }
       };
       
       const handleTouchMove = (e: TouchEvent) => {
-          if (e.touches.length === 2 && initialPinchDist > 0) {
+          if (state.isEmbedMode && e.touches.length === 2 && initialPinchDist > 0) {
               e.preventDefault(); 
               const currentDist = Math.hypot(
                   e.touches[0].clientX - e.touches[1].clientX,
@@ -463,39 +500,31 @@ export default function App() {
       };
 
       window.addEventListener('keydown', handleKeyDown);
-      window.addEventListener('wheel', handleEmbedWheel, { passive: false });
       window.addEventListener('touchstart', handleTouchStart);
       window.addEventListener('touchend', handleTouchEnd);
       window.addEventListener('touchmove', handleTouchMove, { passive: false });
 
       return () => {
           window.removeEventListener('keydown', handleKeyDown);
-          window.removeEventListener('wheel', handleEmbedWheel);
           window.removeEventListener('touchstart', handleTouchStart);
           window.removeEventListener('touchend', handleTouchEnd);
           window.removeEventListener('touchmove', handleTouchMove);
       };
-  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, currentStrokes]);
+  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, state.isPlaying, state.useGyroscope]);
 
-  // Sync Active Layer with Focal Layer in Embed Mode
   useEffect(() => {
       if (state.isEmbedMode) {
           setState(s => ({ ...s, activeLayer: s.focalLayerIndex }));
       }
   }, [state.focalLayerIndex, state.isEmbedMode]);
 
-
-  // Initialize based on URL params (Embed Mode)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('mode') === 'embed') {
         const isTransparent = params.get('bg') === 'transparent';
         const gyroParam = params.get('gyro');
-        
-        // Detect mobile inside embed initialization to force gyro defaults
         const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-        // Load extensive params if present
         const pStrength = params.get('strength');
         const pInverted = params.get('inverted');
         const pStiffness = params.get('stiffness');
@@ -509,18 +538,16 @@ export default function App() {
         const pWidth = params.get('width');
         const pAspect = params.get('aspect');
         const pGlobalBlend = params.get('globalBlend');
-        const pStrokeColor = params.get('strokeColor'); // Custom stroke color
+        const pStrokeColor = params.get('strokeColor');
+        const pSymmetry = params.get('symmetry');
 
         const defaultColorSlot = pStrokeColor ? -1 : (isMobileDevice ? 0 : -1);
 
-        // Initial Embed State
         setState(s => ({
             ...s,
             isEmbedMode: true,
             isTransparentEmbed: isTransparent,
-            isPlaying: true, // Auto play for physics
-            
-            // Visuals from URL or Defaults
+            isPlaying: true,
             parallaxStrength: pStrength ? parseInt(pStrength) : 50,
             parallaxInverted: pInverted === 'true',
             springConfig: {
@@ -530,116 +557,57 @@ export default function App() {
             blurStrength: pBlur ? parseInt(pBlur) : 0,
             focusRange: pFocus ? parseFloat(pFocus) : 0,
             focalLayerIndex: pFocalLayer ? parseInt(pFocalLayer) : 2,
-            
-            // Grid
             isGridEnabled: pGrid === 'true',
             isSnappingEnabled: pSnap === 'true',
             gridSize: pGridSize ? parseInt(pGridSize) : 40,
-
-            // Layout
             canvasWidth: pWidth ? parseInt(pWidth) : 100,
             aspectRatio: pAspect ? parseFloat(pAspect) : null,
             globalLayerBlendMode: (pGlobalBlend as BlendMode) || 'normal',
-            
             canvasBackgroundColor: isTransparent ? 'transparent' : (params.get('bg') ? '#' + params.get('bg') : '#FFFFFF'),
-            
-            // Gyro: Default to true on Mobile unless explicitly disabled
             useGyroscope: isMobileDevice, 
-            isLowPowerMode: true, // Default to Eco in embed
-
-            // Drawing defaults
-            activeColorSlot: defaultColorSlot
+            isLowPowerMode: true,
+            activeColorSlot: defaultColorSlot,
+            symmetryMode: (pSymmetry as SymmetryMode) || SymmetryMode.NONE
         }));
 
-        // 0. Check for Direct External URL (e.g. Gist)
         const externalUrl = params.get('url');
         if (externalUrl) {
-            // Decode potential URI encoding
             const decodedUrl = decodeURIComponent(externalUrl);
             fetch(decodedUrl)
-                .then(res => {
-                    if (!res.ok) throw new Error("Failed to fetch external JSON");
-                    return res.json();
-                })
+                .then(res => { if (!res.ok) throw new Error("Failed"); return res.json(); })
                 .then(data => loadData(data, isTransparent))
-                .catch(err => console.error("External fetch error:", err));
+                .catch(err => console.error("Ext error", err));
             return;
         }
 
-        // 1. Check for Supabase
-        const provider = params.get('provider');
-        const id = params.get('id');
-        const sbUrl = params.get('sbUrl');
-        const sbKey = params.get('sbKey');
-
-        if (provider === 'supabase' && id && sbUrl && sbKey) {
-            fetch(`${sbUrl}/rest/v1/sketches?id=eq.${id}&select=data`, {
-                headers: {
-                    'apikey': sbKey,
-                    'Authorization': `Bearer ${sbKey}`
-                }
-            })
-            .then(res => {
-                if (!res.ok) throw new Error("Supabase fetch failed");
-                return res.json();
-            })
-            .then(data => {
-                if (data && data[0] && data[0].data) {
-                    loadData(data[0].data, isTransparent);
-                }
-            })
-            .catch(err => console.error(err));
-            return;
-        }
-
-        // 2. Check for JSONBlob ID (Short Link)
-        const blobId = params.get('blob');
-        if (blobId) {
-            fetch(`https://jsonblob.com/api/jsonBlob/${blobId}`)
-                .then(res => {
-                    if (!res.ok) throw new Error("Blob not found");
-                    return res.json();
-                })
-                .then(data => loadData(data, isTransparent))
-                .catch(err => {
-                    console.error("Failed to load blob:", err);
-                    // Silent fail for now, maybe show a toast in future
-                });
-            return; // Skip other methods
-        }
-
-        // 3. Check for Encoded Data (Fallback)
         const encodedData = params.get('encoded');
         if (encodedData) {
             try {
                 let jsonStr = '';
                 const decompressed = LZString.decompressFromEncodedURIComponent(encodedData);
-                if (decompressed) {
-                    jsonStr = decompressed;
-                } else {
-                    try { jsonStr = atob(encodedData); } catch (e) {}
-                }
-
-                if (jsonStr) {
-                    loadData(JSON.parse(jsonStr), isTransparent);
-                }
-            } catch (e) {
-                console.error("Failed to decode embed data", e);
-            }
+                if (decompressed) jsonStr = decompressed;
+                else { try { jsonStr = atob(encodedData); } catch (e) {} }
+                if (jsonStr) loadData(JSON.parse(jsonStr), isTransparent);
+            } catch (e) {}
         }
     }
   }, []);
 
+  // Visual Update Only
   const handleStrokesChange = useCallback((newStrokes: Stroke[]) => {
-    // Deep copy current strokes to ensure history immutability
-    // This fixes the undo/redo bug where reference mutation corrupted previous states
-    const safeStrokes = JSON.parse(JSON.stringify(newStrokes));
+    setCurrentStrokes(newStrokes);
+  }, []);
 
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(safeStrokes);
-    if (newHistory.length > 20) newHistory.shift();
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+  // Commit to History (Undo Point)
+  const handleStrokeCommit = useCallback((finalStrokes: Stroke[]) => {
+      // Deep copy to ensure isolation
+      const safeStrokes = JSON.parse(JSON.stringify(finalStrokes));
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(safeStrokes);
+      if (newHistory.length > 20) newHistory.shift();
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+      setCurrentStrokes(safeStrokes); // Ensure sync
   }, [history, historyIndex]);
 
   const handleUndo = () => {
@@ -651,9 +619,9 @@ export default function App() {
   };
   
   const handleReset = () => {
-      // Don't close menu immediately if open, just reset data
       setHistory([[]]);
       setHistoryIndex(0);
+      setCurrentStrokes([]);
   };
 
   const handlePaletteChange = (index: number, newColor: string) => {
@@ -663,18 +631,12 @@ export default function App() {
   };
 
   const handleColorPick = (slotIndex: number) => {
-      setState(s => ({ 
-          ...s, 
-          activeColorSlot: slotIndex, 
-          activeTool: ToolType.BRUSH // Auto switch to brush for convenience
-      }));
+      setState(s => ({ ...s, activeColorSlot: slotIndex, activeTool: ToolType.BRUSH }));
   };
 
-  // Helper to encode state
   const getEncodedState = useCallback(() => {
-     // Minify data structure to save URL space
      const minStrokes = currentStrokes.map(s => ({
-         p: s.points.map(pt => [Number(pt.x.toFixed(4)), Number(pt.y.toFixed(4))]), // Round coordinates
+         p: s.points.map(pt => [Number(pt.x.toFixed(4)), Number(pt.y.toFixed(4))]),
          c: s.colorSlot,
          s: s.size,
          t: s.tool === ToolType.ERASER ? 1 : 0,
@@ -694,10 +656,10 @@ export default function App() {
              cw: state.canvasWidth,
              fl: state.focalLayerIndex,
              bs: state.blurStrength,
-             fr: state.focusRange
+             fr: state.focusRange,
+             sm: state.symmetryMode
          }
      };
-
      return JSON.stringify(minData);
   }, [currentStrokes, state]);
 
@@ -710,43 +672,32 @@ export default function App() {
             const data = JSON.parse(evt.target?.result as string);
             loadData(data, false);
             setState(s => ({ ...s, isMenuOpen: false }));
-        } catch (err) {
-            console.error("Invalid file");
-        }
+        } catch (err) { console.error("Invalid file"); }
     };
     reader.readAsText(file);
   };
 
   const handleTogglePlay = async () => {
-    // On first play on Mobile, ask for Gyro permission
     if (isMobile && !state.isPlaying) {
         if (state.useGyroscope) {
              const granted = await requestGyroPermission();
-             if (!granted) {
-                 setState(s => ({ ...s, useGyroscope: false }));
-             }
+             if (!granted) setState(s => ({ ...s, useGyroscope: false }));
         }
     }
     setState(s => ({ ...s, isPlaying: !s.isPlaying }));
   };
 
-  // Layout Style Logic
   const getContainerStyle = () => {
       if (state.isEmbedMode) return { width: '100%', height: '100%' };
-      
       const baseStyle: React.CSSProperties = {};
-      
       if (state.aspectRatio === 1) {
-          // Square Mode: Prioritize height fit, let width be determined by aspect ratio
           baseStyle.height = '85vh';
           baseStyle.aspectRatio = '1/1';
-          baseStyle.width = 'auto'; // Let aspect ratio drive width
+          baseStyle.width = 'auto';
       } else {
-          // Custom Width Mode: Prioritize width, let height be determined by container
           baseStyle.width = `calc(${state.canvasWidth / 100} * (100vw - (6 * var(--spacing-x))))`;
           baseStyle.height = '85vh';
       }
-      
       return baseStyle;
   };
 
@@ -755,12 +706,10 @@ export default function App() {
         className={`relative w-screen h-screen flex flex-col overflow-hidden transition-colors duration-300 ${state.isTransparentEmbed ? '' : 'bg-[var(--secondary-bg)]'}`}
         style={{ backgroundColor: state.isTransparentEmbed ? 'transparent' : undefined }}
     >
-
       {state.isEmbedMode && showEmbedShortcuts && (
-          <ShortcutsOverlay onClose={() => setShowEmbedShortcuts(false)} />
+          <ShortcutsOverlay onClose={() => setShowEmbedShortcuts(false)} isEmbed={true} />
       )}
 
-      {/* Top Toolbar Area */}
       {!state.isEmbedMode && (
         <div className="w-full h-20 flex items-end justify-center pb-4 shrink-0 z-50">
             <Toolbar 
@@ -782,16 +731,8 @@ export default function App() {
                 onTogglePlay={handleTogglePlay}
                 onToolChange={(tool) => setState(s => ({ ...s, activeTool: tool }))}
                 onColorSlotChange={(index, isSecondary) => {
-                    if (isSecondary) {
-                         setState(s => ({ ...s, activeSecondaryColorSlot: index }));
-                    } else {
-                         // If linking is on, update both
-                         setState(s => ({ 
-                             ...s, 
-                             activeColorSlot: index,
-                             activeSecondaryColorSlot: s.isColorSynced ? index : s.activeSecondaryColorSlot
-                         }));
-                    }
+                    if (isSecondary) setState(s => ({ ...s, activeSecondaryColorSlot: index }));
+                    else setState(s => ({ ...s, activeColorSlot: index, activeSecondaryColorSlot: s.isColorSynced ? index : s.activeSecondaryColorSlot }));
                 }}
                 onPaletteChange={handlePaletteChange}
                 onCyclePalette={handleCyclePalette}
@@ -801,16 +742,8 @@ export default function App() {
                 }}
                 onToggleFill={(enabled) => setState(s => ({ ...s, isFillEnabled: enabled }))}
                 onToggleColorSync={(enabled) => {
-                    // If enabling sync, immediately sync fill to current stroke color
-                    if (enabled) {
-                        setState(s => ({ 
-                            ...s, 
-                            isColorSynced: true,
-                            activeSecondaryColorSlot: s.activeColorSlot
-                        }));
-                    } else {
-                        setState(s => ({ ...s, isColorSynced: false }));
-                    }
+                    if (enabled) setState(s => ({ ...s, isColorSynced: true, activeSecondaryColorSlot: s.activeColorSlot }));
+                    else setState(s => ({ ...s, isColorSynced: false }));
                 }}
                 onToggleStroke={() => {}} 
                 onSizeChange={(size) => setState(s => ({ ...s, brushSize: size }))}
@@ -823,15 +756,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content - Centered Layout with Strict Spacing */}
       <div className={`flex-1 w-full flex flex-col items-center justify-center pb-8 scroll-layer-area ${state.isEmbedMode ? 'p-0 pb-0' : ''}`}>
-        
         <div 
             className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? 'w-full h-full' : ''}`}
             style={getContainerStyle()}
         >
-            {/* Canvas - Removing !rounded-none to allow border radius if container demands it or default to rounded-3xl */}
-            <div className={`w-full h-full rounded-3xl overflow-hidden ${state.isEmbedMode ? '' : 'border border-[var(--border-color)]'}`}>
+            <div className={`w-full h-full ${state.isEmbedMode ? 'rounded-none' : 'rounded-3xl border border-[var(--border-color)]'} overflow-hidden`}>
                 <DrawingCanvas 
                     activeTool={state.activeTool}
                     activeLayer={state.activeLayer}
@@ -855,12 +785,14 @@ export default function App() {
                     isGridEnabled={state.isGridEnabled}
                     isSnappingEnabled={state.isSnappingEnabled}
                     gridSize={state.gridSize}
+                    symmetryMode={state.symmetryMode}
                     useGyroscope={state.useGyroscope}
                     isLowPowerMode={state.isLowPowerMode}
                     isOnionSkinEnabled={state.isOnionSkinEnabled}
                     blurStrength={state.blurStrength}
                     focusRange={state.focusRange}
-                    onStrokesChange={handleStrokesChange}
+                    onStrokesChange={handleStrokesChange} // Visual Only
+                    onStrokeCommit={handleStrokeCommit}   // Undo History
                     strokes={currentStrokes}
                     exportConfig={state.exportConfig}
                     onExportComplete={() => setState(s => ({ ...s, exportConfig: { ...s.exportConfig, isRecording: false } }))}
@@ -872,15 +804,10 @@ export default function App() {
                 />
             </div>
             
-            {/* Layer Slider (Absolute Positioned to strict 'x' spacing) */}
             {!state.isEmbedMode && (
                 <div 
                     className="absolute top-0 bottom-0 hidden md:block"
-                    style={{ 
-                        left: '100%', 
-                        marginLeft: 'var(--spacing-x)', 
-                        width: 'var(--spacing-x)' 
-                    }}
+                    style={{ left: '100%', marginLeft: 'var(--spacing-x)', width: 'var(--spacing-x)' }}
                 >
                      <LayerSlider 
                         activeLayer={state.activeLayer}
@@ -905,6 +832,7 @@ export default function App() {
                 isGridEnabled={state.isGridEnabled}
                 isSnappingEnabled={state.isSnappingEnabled}
                 gridSize={state.gridSize}
+                symmetryMode={state.symmetryMode}
                 useGyroscope={state.useGyroscope}
                 isLowPowerMode={state.isLowPowerMode}
                 isOnionSkinEnabled={state.isOnionSkinEnabled}
@@ -929,6 +857,7 @@ export default function App() {
                 onGridEnabledChange={(val) => setState(s => ({ ...s, isGridEnabled: val }))}
                 onSnappingEnabledChange={(val) => setState(s => ({ ...s, isSnappingEnabled: val }))}
                 onGridSizeChange={(val) => setState(s => ({ ...s, gridSize: val }))}
+                onSymmetryModeChange={(val) => setState(s => ({ ...s, symmetryMode: val }))}
                 onUseGyroscopeChange={(val) => setState(s => ({ ...s, useGyroscope: val }))}
                 onLowPowerModeChange={(val) => setState(s => ({ ...s, isLowPowerMode: val }))}
                 onOnionSkinEnabledChange={(val) => setState(s => ({ ...s, isOnionSkinEnabled: val }))}
