@@ -1,6 +1,6 @@
 
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { LayerSlider } from './components/LayerSlider';
 import { DrawingCanvas } from './components/DrawingCanvas';
@@ -59,7 +59,7 @@ const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Toggle Gyro / Motion</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <span className="text-xs italic">Swipe Left</span></div>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">A</kbd> or <span className="text-xs italic">Double Tap (Mobile)</span></div>
                 </div>
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                     <span>Next Palette</span>
@@ -79,16 +79,6 @@ const ShortcutsOverlay = ({ onClose }: { onClose: () => void }) => (
                 </div>
             </div>
         </div>
-    </div>
-);
-
-// Start Overlay for Mobile Embed (Gyro Permission)
-const StartOverlay = ({ onStart }: { onStart: () => void }) => (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[2px] cursor-pointer" onClick={onStart}>
-         <div className="bg-white/90 rounded-full px-8 py-3 shadow-xl flex items-center gap-3 animate-pulse">
-            <Icons.Hand size={24} className="text-[var(--active-color)]" />
-            <span className="font-semibold text-[var(--text-color)]">Tap to Explore</span>
-         </div>
     </div>
 );
 
@@ -170,7 +160,7 @@ export default function App() {
 
   // Embed specific state
   const [showEmbedShortcuts, setShowEmbedShortcuts] = useState(false);
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const lastTap = useRef<number>(0);
 
   // Request Gyro Permission helper
   const requestGyroPermission = async () => {
@@ -178,6 +168,7 @@ export default function App() {
         try {
             const response = await (DeviceOrientationEvent as any).requestPermission();
             if (response === 'granted') {
+                setState(s => ({ ...s, useGyroscope: true }));
                 return true;
             }
         } catch (e) {
@@ -185,16 +176,8 @@ export default function App() {
         }
         return false;
     }
+    setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
     return true; // No permission needed on Android/Desktop usually
-  };
-
-  const handleStartInteraction = async () => {
-    if (state.useGyroscope && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-        try {
-            await (DeviceOrientationEvent as any).requestPermission();
-        } catch (e) {}
-    }
-    setHasInteracted(true);
   };
 
   // Apply UI Theme CSS Variables & Layout Spacing
@@ -436,6 +419,14 @@ export default function App() {
       const handleTouchEnd = (e: TouchEvent) => {
           initialPinchDist = 0;
           
+          // Double Tap Detection
+          const now = Date.now();
+          if (now - lastTap.current < 300) {
+              // Double tap detected
+              requestGyroPermission();
+          }
+          lastTap.current = now;
+
           // Swipe Detection Logic (One finger)
           // We check changedTouches because e.touches is empty on end
           if (e.changedTouches.length === 1) {
@@ -455,7 +446,6 @@ export default function App() {
                      setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
                  }
              }
-             // Swipe Up/Down could be focal layer if needed, but keeping it simple as requested
           }
       };
       
@@ -765,11 +755,6 @@ export default function App() {
         className={`relative w-screen h-screen flex flex-col overflow-hidden transition-colors duration-300 ${state.isTransparentEmbed ? '' : 'bg-[var(--secondary-bg)]'}`}
         style={{ backgroundColor: state.isTransparentEmbed ? 'transparent' : undefined }}
     >
-      
-      {/* Mobile Embed Start Overlay for Permission */}
-      {state.isEmbedMode && isMobile && !hasInteracted && (
-          <StartOverlay onStart={handleStartInteraction} />
-      )}
 
       {state.isEmbedMode && showEmbedShortcuts && (
           <ShortcutsOverlay onClose={() => setShowEmbedShortcuts(false)} />
@@ -845,8 +830,8 @@ export default function App() {
             className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? 'w-full h-full' : ''}`}
             style={getContainerStyle()}
         >
-            {/* Canvas */}
-            <div className={`w-full h-full rounded-3xl overflow-hidden ${state.isEmbedMode ? '!rounded-none' : 'border border-[var(--border-color)]'}`}>
+            {/* Canvas - Removing !rounded-none to allow border radius if container demands it or default to rounded-3xl */}
+            <div className={`w-full h-full rounded-3xl overflow-hidden ${state.isEmbedMode ? '' : 'border border-[var(--border-color)]'}`}>
                 <DrawingCanvas 
                     activeTool={state.activeTool}
                     activeLayer={state.activeLayer}
@@ -882,6 +867,7 @@ export default function App() {
                     onStopPreview={() => setState(s => ({ ...s, exportConfig: { ...s.exportConfig, isActive: false, isRecording: false } }))}
                     onColorPick={handleColorPick}
                     isEmbedMode={state.isEmbedMode}
+                    isMobile={isMobile}
                     onEmbedContextMenu={() => setShowEmbedShortcuts(true)}
                 />
             </div>

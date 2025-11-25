@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { ToolType, Point, Stroke, EraserMode, SpringConfig, BlendMode, ExportConfig, TrajectoryType } from '../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -38,6 +39,7 @@ interface DrawingCanvasProps {
   onEmbedContextMenu?: () => void;
   strokes: Stroke[];
   isEmbedMode?: boolean;
+  isMobile?: boolean;
 }
 
 // Overscan amount in pixels (added to all sides) to prevent hard edges during parallax
@@ -78,7 +80,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   onColorPick,
   onEmbedContextMenu,
   strokes,
-  isEmbedMode
+  isEmbedMode,
+  isMobile = false
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -617,8 +620,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         return; 
     }
     
-    // In Embed Mode, disable drawing and enable "View Dragging"
-    if (isEmbedMode) {
+    // In Embed Mode MOBILE, disable drawing and enable "View Dragging"
+    // In Embed Mode DESKTOP, allow drawing
+    if (isEmbedMode && isMobile) {
         isDraggingView.current = true;
         return;
     }
@@ -661,25 +665,23 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         }
         const { width, height, left, top } = containerRef.current.getBoundingClientRect();
         
-        // If we are dragging (or just moving if desktop embed), update view
-        // On mobile, we require drag (isDraggingView) to avoid conflict with potential other gestures, 
-        // though strictly 'pointermove' implies drag if using Pointer Events, here we use Touch/Mouse.
-        // The simplified logic requested: "Remove drawing with click" -> 1 finger drag looks around.
+        // Only update View Target if we are in "Look Around" mode (Mobile Embed)
+        // OR if it's desktop embed (hover parallax)
         
-        if (isDraggingView.current || !('touches' in e)) { 
+        if (isDraggingView.current || (!('touches' in e) && isEmbedMode)) { 
             const x = ((clientX - left) / width) * 2 - 1;
             const y = ((clientY - top) / height) * 2 - 1;
             targetOffset.current = { x, y };
         }
         
-        // If it's a touch move, don't do drawing logic below
-        if ('touches' in e) return;
+        // If it's a touch move in embed mode (and mobile), stop here (no drawing)
+        if (isEmbedMode && isMobile && 'touches' in e) return;
     }
 
     if (exportConfig?.isActive) return;
 
     // Stop if we are just looking around
-    if (isEmbedMode) return;
+    if (isDraggingView.current) return;
 
     const pt = getNormalizedLocalPoint(e);
 
@@ -724,7 +726,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         return;
     }
 
-    if (exportConfig?.isActive || isEmbedMode) return;
+    if (exportConfig?.isActive || (isEmbedMode && isMobile)) return;
 
     if (activeTool === ToolType.SELECT) {
         isDraggingSelection.current = false;
