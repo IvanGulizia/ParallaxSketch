@@ -11,14 +11,21 @@ export const LayerSlider: React.FC<LayerSliderProps> = ({ activeLayer, onChange 
   const layers = [4, 3, 2, 1, 0]; 
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center z-40 pointer-events-auto">
+    <div 
+      className="w-full h-full flex flex-col items-center justify-center z-40 pointer-events-auto"
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+    >
       {/* The slider bar itself */}
       <div className="w-full max-w-[2rem] h-80 bg-[var(--tool-bg)] rounded-full flex flex-col items-center justify-between py-6 border border-[var(--border-color)] relative">
         
         {layers.map((layerIndex) => (
           <button
             key={layerIndex}
-            onClick={() => onChange(layerIndex)}
+            onClick={(e) => {
+                e.stopPropagation();
+                onChange(layerIndex);
+            }}
             className="relative z-10 w-8 h-8 flex items-center justify-center focus:outline-none appearance-none bg-transparent border-none p-0"
             title={`Layer ${layerIndex}`}
           >

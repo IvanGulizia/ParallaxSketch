@@ -65,6 +65,7 @@ interface MenuOverlayProps {
   globalLayerBlendMode: BlendMode;
   activeLayer: number;
   layerBlendModes: Record<number, BlendMode>;
+  layerBlurStrengths: Record<number, number>;
   aspectRatio: number | null;
   uiTheme: UITheme;
   isGridEnabled: boolean;
@@ -91,6 +92,7 @@ interface MenuOverlayProps {
   onAspectRatioChange: (ratio: number | null) => void;
   onGlobalLayerBlendModeChange: (mode: BlendMode) => void;
   onLayerBlendModeChange: (layerId: number, mode: BlendMode) => void;
+  onLayerBlurChange: (layerId: number, val: number) => void;
   onUIThemeChange: (theme: UITheme) => void;
   onGridEnabledChange: (val: boolean) => void;
   onSnappingEnabledChange: (val: boolean) => void;
@@ -115,6 +117,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     globalLayerBlendMode,
     activeLayer,
     layerBlendModes,
+    layerBlurStrengths,
     aspectRatio,
     uiTheme,
     isGridEnabled,
@@ -141,6 +144,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     onAspectRatioChange,
     onGlobalLayerBlendModeChange,
     onLayerBlendModeChange,
+    onLayerBlurChange,
     onUIThemeChange,
     onGridEnabledChange,
     onSnappingEnabledChange,
@@ -314,17 +318,17 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                 
                 <ControlRow label="Symmetry">
                     <div className="flex bg-[var(--button-bg)] rounded-lg p-0.5 border border-[var(--button-border)]">
-                        {[SymmetryMode.NONE, SymmetryMode.HORIZONTAL, SymmetryMode.VERTICAL, SymmetryMode.QUAD].map((mode) => (
+                        {[SymmetryMode.NONE, SymmetryMode.HORIZONTAL, SymmetryMode.VERTICAL, SymmetryMode.QUAD, SymmetryMode.CENTRAL].map((mode) => (
                             <button
                                 key={mode}
                                 onClick={() => onSymmetryModeChange(mode)}
-                                className={`px-2 py-1 rounded-md text-[10px] uppercase font-medium transition-all ${
+                                className={`px-1.5 py-1 rounded-md text-[9px] uppercase font-medium transition-all flex-1 ${
                                     symmetryMode === mode 
                                     ? 'bg-[var(--active-color)] text-white shadow-sm' 
                                     : 'text-[var(--secondary-text)] hover:text-[var(--text-color)]'
                                 }`}
                             >
-                                {mode === SymmetryMode.NONE ? 'Off' : mode === SymmetryMode.HORIZONTAL ? 'Hor' : mode === SymmetryMode.VERTICAL ? 'Ver' : 'Quad'}
+                                {mode === SymmetryMode.NONE ? 'Off' : mode === SymmetryMode.HORIZONTAL ? 'Hor' : mode === SymmetryMode.VERTICAL ? 'Ver' : mode === SymmetryMode.QUAD ? 'Quad' : 'CNTR'}
                             </button>
                         ))}
                     </div>
@@ -350,7 +354,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                         <span className="text-[10px] text-gray-400 font-medium w-8 text-right">{focusRange < 0 ? 'All' : `±${focusRange}`}</span>
                          <div className="w-24">
                             <Slider 
-                                min={-1} max={2} step={1}
+                                min={-0.5} max={2.5} step={0.5}
                                 value={focusRange} 
                                 onChange={onFocusRangeChange}
                             />
@@ -358,6 +362,19 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     </div>
                 </ControlRow>
                 
+                <ControlRow label={`Layer ${activeLayer} Blur`}>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-medium w-8 text-right">{layerBlurStrengths[activeLayer]}px</span>
+                        <div className="w-24">
+                            <Slider 
+                                min={0} max={20} step={1}
+                                value={layerBlurStrengths[activeLayer]} 
+                                onChange={(v) => onLayerBlurChange(activeLayer, v)}
+                            />
+                        </div>
+                    </div>
+                </ControlRow>
+
                 <ControlRow label="Onion Skin">
                     <ToggleBtn 
                         checked={isOnionSkinEnabled} 

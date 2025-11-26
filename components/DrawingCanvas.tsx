@@ -23,6 +23,7 @@ interface DrawingCanvasProps {
   backgroundColor: string;
   globalLayerBlendMode: BlendMode;
   layerBlendModes: Record<number, BlendMode>;
+  layerBlurStrengths?: Record<number, number>; // New prop
   isGridEnabled: boolean;
   isSnappingEnabled: boolean;
   gridSize: number;
@@ -67,6 +68,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   backgroundColor,
   globalLayerBlendMode,
   layerBlendModes,
+  layerBlurStrengths,
   isGridEnabled,
   isSnappingEnabled,
   gridSize,
@@ -169,21 +171,32 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     if (layerIndex === activeLayer && symmetryMode !== SymmetryMode.NONE && !isEmbedMode && !exportConfig?.isActive && !isPlaying) {
         ctx.save();
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-        ctx.setLineDash([5, 5]);
-        ctx.lineWidth = 1;
+        
+        // Retrieve the actual CSS color value for the slider track from root or computed style
+        let guideColor = '#d3cdba';
+        const style = getComputedStyle(document.documentElement);
+        const cssVar = style.getPropertyValue('--slider-track').trim();
+        if (cssVar) guideColor = cssVar;
+        
+        ctx.strokeStyle = guideColor; 
+        ctx.setLineDash([6, 6]);
+        ctx.lineWidth = 0.5; // Ultra thin line
         
         const centerX = fullWidth / 2;
         const centerY = fullHeight / 2;
 
-        if (symmetryMode === SymmetryMode.HORIZONTAL || symmetryMode === SymmetryMode.QUAD) {
+        // Horizontal (Left/Right mirror) needs a Vertical Axis
+        // Central (Point Reflection) also uses a Vertical Axis visual guide as requested
+        if (symmetryMode === SymmetryMode.HORIZONTAL || symmetryMode === SymmetryMode.QUAD || symmetryMode === SymmetryMode.CENTRAL) {
             ctx.moveTo(centerX, 0);
             ctx.lineTo(centerX, fullHeight);
         }
+        // Vertical (Top/Bottom mirror) needs a Horizontal Axis
         if (symmetryMode === SymmetryMode.VERTICAL || symmetryMode === SymmetryMode.QUAD) {
             ctx.moveTo(0, centerY);
             ctx.lineTo(fullWidth, centerY);
         }
+        
         ctx.stroke();
         ctx.restore();
     }
@@ -537,12 +550,15 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                 const drawY = (dimensions.height - source.height) / 2 + offY;
 
                 let effectiveBlur = 0;
+                const manualBlur = (layerBlurStrengths && layerBlurStrengths[index]) || 0;
+
                 // Negative range = uniform blur
                 if (focusRange < 0) {
-                    effectiveBlur = blurStrength;
+                    effectiveBlur = Math.max(blurStrength, manualBlur);
                 } else {
                     const dist = Math.abs(index - focalLayerIndex);
-                    effectiveBlur = Math.max(0, dist - focusRange) * blurStrength;
+                    const depthBlur = Math.max(0, dist - focusRange) * blurStrength;
+                    effectiveBlur = Math.max(depthBlur, manualBlur);
                 }
 
                 ctx.save();
@@ -570,7 +586,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animationLoop);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange]); 
+  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange, layerBlurStrengths]); 
 
 
   // --- Interaction ---
@@ -652,6 +668,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         return; 
     }
     
+    // Disable drawing on Mobile/iPad when playing (viewing mode)
+    // Added check for isMobile AND isPlaying
+    if (isPlaying && isMobile) return;
+
     if (isEmbedMode && isMobile) {
         isDraggingView.current = true;
         return;
@@ -700,6 +720,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           const qPoints = newPoints.map(p => ({ x: 1 - p.x, y: 1 - p.y }));
           strokes.push({ ...baseStroke, id: baseStroke.id + '_q', points: qPoints });
       }
+      if (symmetryMode === SymmetryMode.CENTRAL) {
+          // Point Reflection (1-x, 1-y) without H/V components
+          const cPoints = newPoints.map(p => ({ x: 1 - p.x, y: 1 - p.y }));
+          strokes.push({ ...baseStroke, id: baseStroke.id + '_c', points: cPoints });
+      }
+
       return strokes;
   };
 
@@ -834,11 +860,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
        {[0, 1, 2, 3, 4].map(layerIndex => {
            let effectiveBlur = 0;
            // Handle Blur Logic: Negative focusRange = Uniform Blur
+           const manualBlur = (layerBlurStrengths && layerBlurStrengths[layerIndex]) || 0;
+
            if (focusRange < 0) {
-               effectiveBlur = blurStrength;
+               effectiveBlur = Math.max(blurStrength, manualBlur);
            } else {
                const dist = Math.abs(layerIndex - focalLayerIndex);
-               effectiveBlur = Math.max(0, dist - focusRange) * blurStrength;
+               const depthBlur = Math.max(0, dist - focusRange) * blurStrength;
+               effectiveBlur = Math.max(depthBlur, manualBlur);
            }
            
            const showOnion = isOnionSkinEnabled && !isPlaying && !exportConfig?.isActive;

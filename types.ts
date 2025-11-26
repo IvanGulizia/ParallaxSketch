@@ -14,7 +14,8 @@ export enum SymmetryMode {
   NONE = 'NONE',
   HORIZONTAL = 'HORIZONTAL', // Mirror Left/Right
   VERTICAL = 'VERTICAL',     // Mirror Top/Bottom
-  QUAD = 'QUAD'              // Mirror Both
+  QUAD = 'QUAD',             // Mirror Both
+  CENTRAL = 'CENTRAL'        // Point Reflection (Inverted)
 }
 
 export interface Point {
@@ -117,6 +118,7 @@ export interface AppState {
 
   globalLayerBlendMode: BlendMode; 
   layerBlendModes: Record<number, BlendMode>; // Per-layer blend mode (CSS mix-blend-mode)
+  layerBlurStrengths: Record<number, number>; // Per-layer blur override
   uiTheme: UITheme; 
   isEmbedMode: boolean;
   isTransparentEmbed: boolean; // New: for transparent background embeds

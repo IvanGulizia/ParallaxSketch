@@ -106,8 +106,9 @@ const ShortcutsOverlay = ({ onClose, isEmbed }: { onClose: () => void, isEmbed: 
 );
 
 export default function App() {
-  // Detect Mobile for default settings
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  // Detect Mobile/iPad for default settings
+  // iPad Pro often reports as MacIntel but has touch points
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   const [state, setState] = useState<AppState>({
     activeTool: ToolType.BRUSH,
@@ -138,7 +139,7 @@ export default function App() {
     isGridEnabled: false,
     isSnappingEnabled: true,
     gridSize: 40,
-    symmetryMode: SymmetryMode.NONE, // New
+    symmetryMode: SymmetryMode.NONE,
     
     // Visual
     isOnionSkinEnabled: true,
@@ -147,6 +148,7 @@ export default function App() {
 
     globalLayerBlendMode: 'normal',
     layerBlendModes: { 0: 'normal', 1: 'normal', 2: 'normal', 3: 'normal', 4: 'normal' },
+    layerBlurStrengths: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 },
     uiTheme: {
         activeColor: "#566fa8",
         textColor: "#18284c",
@@ -346,6 +348,7 @@ export default function App() {
               focalLayerIndex: data.config?.focalLayerIndex ?? s.focalLayerIndex,
               globalLayerBlendMode: data.config?.globalLayerBlendMode ?? s.globalLayerBlendMode,
               layerBlendModes: data.config?.layerBlendModes ?? s.layerBlendModes,
+              layerBlurStrengths: data.config?.layerBlurStrengths ?? s.layerBlurStrengths,
               canvasWidth: data.config?.canvasWidth ?? s.canvasWidth
           }));
       }
@@ -374,6 +377,7 @@ export default function App() {
             globalLayerBlendMode: state.globalLayerBlendMode,
             canvasWidth: state.canvasWidth,
             layerBlendModes: state.layerBlendModes,
+            layerBlurStrengths: state.layerBlurStrengths,
             blurStrength: state.blurStrength,
             focusRange: state.focusRange,
             symmetryMode: state.symmetryMode
@@ -394,23 +398,16 @@ export default function App() {
           // Play / Pause
           if (e.code === 'Space') {
               e.preventDefault(); 
-              if (state.isEmbedMode) {
-                  // In embed mode, Space toggles menu if implemented, or play?
-                  // Previous prompt said "Space = menu". Latest says "Space = play/pause"
-                  // But also "m = menu des shortcut"
-                  handleTogglePlay();
-              } else {
-                  handleTogglePlay();
-              }
+              handleTogglePlay();
           }
 
-          // Focal Layer
+          // Focal Layer (Inverted W/S as requested)
           if (e.key === 'w' || e.key === 'ArrowUp') {
-              // W/Up = Back (-1)
+              // W/Up = Back (-1) -> Move AWAY (deeper)
               setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
           }
           if (e.key === 's' || e.key === 'ArrowDown') {
-               // S/Down = Front (+1)
+               // S/Down = Front (+1) -> Move CLOSER
                setState(s => ({ ...s, focalLayerIndex: Math.min(4, s.focalLayerIndex + 1) }));
           }
 
@@ -435,6 +432,9 @@ export default function App() {
           if (!state.isEmbedMode) {
               if (e.key === 'e') {
                   handleExport();
+              }
+              if (e.key === 'r') {
+                  handleReset();
               }
               if (['1','2','3','4','5'].includes(e.key)) {
                   const index = parseInt(e.key) - 1;
@@ -522,8 +522,9 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('mode') === 'embed') {
         const isTransparent = params.get('bg') === 'transparent';
-        const gyroParam = params.get('gyro');
-        const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        // Improved Mobile Detection for iPad
+        const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
         const pStrength = params.get('strength');
         const pInverted = params.get('inverted');
@@ -619,9 +620,8 @@ export default function App() {
   };
   
   const handleReset = () => {
-      setHistory([[]]);
-      setHistoryIndex(0);
-      setCurrentStrokes([]);
+      // Push an empty state to history instead of resetting history
+      handleStrokeCommit([]);
   };
 
   const handlePaletteChange = (index: number, newColor: string) => {
@@ -688,7 +688,21 @@ export default function App() {
   };
 
   const getContainerStyle = () => {
-      if (state.isEmbedMode) return { width: '100%', height: '100%' };
+      // In embed mode, if aspect ratio is defined, align center.
+      // Use margins to center.
+      if (state.isEmbedMode) {
+          if (state.aspectRatio) {
+              return { 
+                  aspectRatio: `${state.aspectRatio}/1`, 
+                  maxHeight: '100%', 
+                  maxWidth: '100%',
+                  margin: 'auto'
+              };
+          }
+          // Full width/height for responsive if no aspect ratio locked
+          return { width: '100%', height: '100%' };
+      }
+
       const baseStyle: React.CSSProperties = {};
       if (state.aspectRatio === 1) {
           baseStyle.height = '85vh';
@@ -758,7 +772,7 @@ export default function App() {
 
       <div className={`flex-1 w-full flex flex-col items-center justify-center pb-8 scroll-layer-area ${state.isEmbedMode ? 'p-0 pb-0' : ''}`}>
         <div 
-            className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? 'w-full h-full' : ''}`}
+            className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? '' : ''}`}
             style={getContainerStyle()}
         >
             <div className={`w-full h-full ${state.isEmbedMode ? 'rounded-none' : 'rounded-3xl border border-[var(--border-color)]'} overflow-hidden`}>
@@ -801,6 +815,7 @@ export default function App() {
                     isEmbedMode={state.isEmbedMode}
                     isMobile={isMobile}
                     onEmbedContextMenu={() => setShowEmbedShortcuts(true)}
+                    layerBlurStrengths={state.layerBlurStrengths}
                 />
             </div>
             
@@ -827,6 +842,7 @@ export default function App() {
                 globalLayerBlendMode={state.globalLayerBlendMode}
                 activeLayer={state.activeLayer}
                 layerBlendModes={state.layerBlendModes}
+                layerBlurStrengths={state.layerBlurStrengths}
                 aspectRatio={state.aspectRatio}
                 uiTheme={state.uiTheme}
                 isGridEnabled={state.isGridEnabled}
@@ -853,6 +869,7 @@ export default function App() {
                 onAspectRatioChange={(r) => setState(s => ({ ...s, aspectRatio: r }))}
                 onGlobalLayerBlendModeChange={(mode) => setState(s => ({ ...s, globalLayerBlendMode: mode }))}
                 onLayerBlendModeChange={(layerId, mode) => setState(s => ({ ...s, layerBlendModes: { ...s.layerBlendModes, [layerId]: mode } }))}
+                onLayerBlurChange={(layerId, val) => setState(s => ({ ...s, layerBlurStrengths: { ...s.layerBlurStrengths, [layerId]: val } }))}
                 onUIThemeChange={(theme) => setState(s => ({ ...s, uiTheme: theme }))}
                 onGridEnabledChange={(val) => setState(s => ({ ...s, isGridEnabled: val }))}
                 onSnappingEnabledChange={(val) => setState(s => ({ ...s, isSnappingEnabled: val }))}
