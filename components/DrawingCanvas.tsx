@@ -43,6 +43,7 @@ interface DrawingCanvasProps {
   strokes: Stroke[];
   isEmbedMode?: boolean;
   isMobile?: boolean;
+  sliderTrackColor?: string; // Theme prop
 }
 
 // Overscan amount in pixels (added to all sides) to prevent hard edges during parallax
@@ -87,7 +88,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   onEmbedContextMenu,
   strokes,
   isEmbedMode,
-  isMobile = false
+  isMobile = false,
+  sliderTrackColor = '#d3cdba'
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -182,23 +184,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         ctx.save();
         ctx.beginPath();
         
-        // Retrieve the actual CSS color value for the slider track
-        let guideColor = '#d3cdba';
-        if (typeof window !== 'undefined') {
-            const style = getComputedStyle(document.documentElement);
-            const cssVar = style.getPropertyValue('--slider-track').trim();
-            if (cssVar) guideColor = cssVar;
-        }
-        
-        ctx.strokeStyle = guideColor; 
-        ctx.setLineDash([4, 6]); // Finer dash
-        ctx.lineWidth = 0.5; // Ultra thin line
+        ctx.strokeStyle = sliderTrackColor; 
+        ctx.setLineDash([4, 6]); 
+        ctx.lineWidth = 0.5; // Thinner
+        // ctx.globalAlpha = 0.6; // Removed alpha to be sure color is visible, 0.5px is thin enough
         
         const centerX = fullWidth / 2;
         const centerY = fullHeight / 2;
 
         // Horizontal (Left/Right mirror) needs a Vertical Axis
-        // Central (Point Reflection) also uses a Vertical Axis visual guide as requested
+        // Central (Point Reflection) visual guide: User requested "comme le HOR" -> Vertical Line
         if (symmetryMode === SymmetryMode.HORIZONTAL || symmetryMode === SymmetryMode.QUAD || symmetryMode === SymmetryMode.CENTRAL) {
             ctx.moveTo(centerX, 0);
             ctx.lineTo(centerX, fullHeight);
@@ -291,12 +286,12 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     // Notify render
     setRenderVersion(v => v + 1);
-  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode, symmetryMode, activeLayer, isEmbedMode, exportConfig, isPlaying, getScaleFactor]);
+  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode, symmetryMode, activeLayer, isEmbedMode, exportConfig, isPlaying, getScaleFactor, sliderTrackColor]);
 
   useEffect(() => {
     // Render all 7 layers
     [0, 1, 2, 3, 4, 5, 6].forEach(renderLayer);
-  }, [strokes, renderLayer, selectedStrokeId, dimensions, palette, symmetryMode]);
+  }, [strokes, renderLayer, selectedStrokeId, dimensions, palette, symmetryMode, sliderTrackColor]);
 
   // Apply Transform Helper
   const applyParallaxTransforms = (offsetX: number, offsetY: number) => {
@@ -604,7 +599,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animationLoop);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange, layerBlurStrengths, getScaleFactor]); 
+  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange, layerBlurStrengths, getScaleFactor, sliderTrackColor]); 
 
 
   // --- Interaction ---

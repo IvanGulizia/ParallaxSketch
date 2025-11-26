@@ -820,6 +820,7 @@ export default function App() {
                     isMobile={isMobile}
                     onEmbedContextMenu={() => setShowEmbedShortcuts(true)}
                     layerBlurStrengths={state.layerBlurStrengths}
+                    sliderTrackColor={state.uiTheme.sliderTrack}
                 />
             </div>
             
