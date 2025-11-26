@@ -159,9 +159,15 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 }) => {
   const [showShare, setShowShare] = useState(false);
   const [shareTransparent, setShareTransparent] = useState(false);
+  const [showUIHint, setShowUIHint] = useState(true); // Control UI param in embed
   const [showExportStudio, setShowExportStudio] = useState(false);
   const [externalUrlInput, setExternalUrlInput] = useState('');
   const [generatedExternalLink, setGeneratedExternalLink] = useState('');
+  
+  // Test Hosting State
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [autoHostLink, setAutoHostLink] = useState('');
 
   const menuRef = useRef<HTMLDivElement>(null);
   const shareSectionRef = useRef<HTMLDivElement>(null);
@@ -203,18 +209,11 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-  
-  const generateExternalLink = () => {
-      if (!externalUrlInput) return;
-      let finalUrl = externalUrlInput;
-      if (finalUrl.includes('gist.github.com') && !finalUrl.includes('raw')) {
-         finalUrl = finalUrl.replace('gist.github.com', 'gist.githubusercontent.com') + '/raw';
-      }
+  const buildEmbedUrl = (sourceUrl: string) => {
       const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
       const url = new URL(origin + window.location.pathname);
       url.searchParams.set('mode', 'embed');
-      url.searchParams.set('url', finalUrl);
+      url.searchParams.set('url', sourceUrl);
       
       // Visuals
       url.searchParams.set('strength', parallaxStrength.toString());
@@ -238,13 +237,70 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       
       // Physics / Gyro
       url.searchParams.set('gyro', useGyroscope.toString());
+      
+      // UI Options
+      if (!showUIHint) url.searchParams.set('ui', 'false');
 
       // Background
       if (shareTransparent) url.searchParams.set('bg', 'transparent');
       else url.searchParams.set('bg', backgroundColor.replace('#', ''));
       
-      setGeneratedExternalLink(url.toString());
+      return url.toString();
   };
+
+  const generateExternalLink = () => {
+      if (!externalUrlInput) return;
+      let finalUrl = externalUrlInput;
+      if (finalUrl.includes('gist.github.com') && !finalUrl.includes('raw')) {
+         finalUrl = finalUrl.replace('gist.github.com', 'gist.githubusercontent.com') + '/raw';
+      }
+      setGeneratedExternalLink(buildEmbedUrl(finalUrl));
+  };
+
+  const handleAutoUpload = async () => {
+      setIsUploading(true);
+      setUploadError(null);
+      setAutoHostLink('');
+
+      try {
+          // 1. Get Data
+          const rawData = getEncodedState();
+          // Re-parse to send as pure JSON object, not stringified string
+          const jsonData = JSON.parse(rawData);
+
+          // 2. Post to JSONBlob (Anonymous Hosting)
+          const response = await fetch('https://jsonblob.com/api/jsonBlob', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+              },
+              body: JSON.stringify(jsonData)
+          });
+
+          if (!response.ok) {
+              throw new Error(`Upload failed: ${response.statusText}`);
+          }
+
+          // 3. Get Location
+          const location = response.headers.get('Location');
+          if (!location) {
+              throw new Error("No location returned from host.");
+          }
+
+          // 4. Generate Link
+          const embedCode = buildEmbedUrl(location);
+          setAutoHostLink(embedCode);
+
+      } catch (err) {
+          console.error(err);
+          setUploadError("Upload failed. Adblockers or CORS might be blocking the request.");
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -637,6 +693,10 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                                 <input type="checkbox" checked={shareTransparent} onChange={(e) => setShareTransparent(e.target.checked)} />
                                 <span className="text-[10px] text-[var(--text-color)]">Transparent BG</span>
                             </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={showUIHint} onChange={(e) => setShowUIHint(e.target.checked)} />
+                                <span className="text-[10px] text-[var(--text-color)]">Show UI Hint</span>
+                            </label>
                         </div>
                     </div>
 
@@ -678,6 +738,50 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 
                 </div>
             )}
+        </div>
+
+        {/* Experimental Hosting Test Section */}
+        <div>
+            <SectionTitle>Experimental Hosting</SectionTitle>
+            <div className="bg-[var(--tool-bg)] p-4 rounded-2xl border border-[var(--border-color)] space-y-4">
+                <p className="text-[10px] text-[var(--secondary-text)] leading-relaxed">
+                    This feature attempts to upload your sketch to a public cloud service (JSONBlob) automatically to generate a sharable link without manual file hosting. 
+                    <br/><span className="font-bold text-red-400">Note: Adblockers or Firewalls may block this request.</span>
+                </p>
+                
+                <button 
+                    onClick={handleAutoUpload}
+                    disabled={isUploading}
+                    className={`w-full py-2.5 rounded-lg text-xs font-semibold border transition-all ${
+                        isUploading
+                        ? 'bg-[var(--button-bg)] text-[var(--disabled-color)] cursor-wait'
+                        : 'bg-[var(--active-color)] text-white border-[var(--active-color)] hover:opacity-90'
+                    }`}
+                >
+                    {isUploading ? 'Uploading to Cloud...' : 'Upload to Public Cloud (Beta)'}
+                </button>
+
+                {uploadError && (
+                    <p className="text-[10px] text-red-500 font-medium text-center animate-in fade-in">
+                        {uploadError}
+                    </p>
+                )}
+
+                {autoHostLink && (
+                    <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1">
+                        <span className="text-[10px] font-bold text-[var(--text-color)] block">Your Auto-Generated Embed Code:</span>
+                        <textarea 
+                            readOnly
+                            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                            className="w-full h-24 text-[9px] font-mono bg-white border border-[var(--border-color)] rounded p-2 resize-none focus:outline-none"
+                            value={`<iframe src="${autoHostLink}" width="100%" height="600" style="border:none; border-radius:12px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`}
+                        />
+                        <p className="text-[9px] text-green-600 font-medium text-center">
+                            Success! The JSON is hosted automatically.
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
 
       </div>
