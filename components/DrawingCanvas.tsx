@@ -93,7 +93,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   // Offscreen canvases (sized: width + 2*margin, height + 2*margin)
-  const offscreenCanvases = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null, null]);
+  // Updated for 7 layers
+  const offscreenCanvases = useRef<(HTMLCanvasElement | null)[]>([null, null, null, null, null, null, null]);
   
   // Physics State
   const targetOffset = useRef({ x: 0, y: 0 });
@@ -149,6 +150,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       y: (p.y * height) + OVERSCAN_MARGIN
   });
 
+  // Calculate Scale Factor for strokes (Reference width: 1000px)
+  // This ensures strokes look proportional on small embedded screens
+  const getScaleFactor = useCallback(() => {
+      if (dimensions.width === 0) return 1;
+      // Baseline is 1000px width. If width is 500px, lines should be 0.5x thickness.
+      return Math.max(0.1, dimensions.width / 1000);
+  }, [dimensions.width]);
+
   // --- Rendering ---
   const renderLayer = useCallback((layerIndex: number) => {
     const canvas = offscreenCanvases.current[layerIndex];
@@ -156,6 +165,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     const fullWidth = dimensions.width + (OVERSCAN_MARGIN * 2);
     const fullHeight = dimensions.height + (OVERSCAN_MARGIN * 2);
+    const scaleFactor = getScaleFactor();
 
     if (canvas.width !== fullWidth || canvas.height !== fullHeight) {
         canvas.width = fullWidth;
@@ -172,14 +182,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         ctx.save();
         ctx.beginPath();
         
-        // Retrieve the actual CSS color value for the slider track from root or computed style
+        // Retrieve the actual CSS color value for the slider track
         let guideColor = '#d3cdba';
-        const style = getComputedStyle(document.documentElement);
-        const cssVar = style.getPropertyValue('--slider-track').trim();
-        if (cssVar) guideColor = cssVar;
+        if (typeof window !== 'undefined') {
+            const style = getComputedStyle(document.documentElement);
+            const cssVar = style.getPropertyValue('--slider-track').trim();
+            if (cssVar) guideColor = cssVar;
+        }
         
         ctx.strokeStyle = guideColor; 
-        ctx.setLineDash([6, 6]);
+        ctx.setLineDash([4, 6]); // Finer dash
         ctx.lineWidth = 0.5; // Ultra thin line
         
         const centerX = fullWidth / 2;
@@ -240,7 +252,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.lineWidth = stroke.size;
+            
+            // APPLY SCALE FACTOR TO LINE WIDTH
+            ctx.lineWidth = stroke.size * scaleFactor;
             
             if (stroke.tool === ToolType.ERASER) {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -277,10 +291,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     
     // Notify render
     setRenderVersion(v => v + 1);
-  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode, symmetryMode, activeLayer, isEmbedMode, exportConfig, isPlaying]);
+  }, [strokes, selectedStrokeId, dimensions, palette, isLowPowerMode, symmetryMode, activeLayer, isEmbedMode, exportConfig, isPlaying, getScaleFactor]);
 
   useEffect(() => {
-    [0, 1, 2, 3, 4].forEach(renderLayer);
+    // Render all 7 layers
+    [0, 1, 2, 3, 4, 5, 6].forEach(renderLayer);
   }, [strokes, renderLayer, selectedStrokeId, dimensions, palette, symmetryMode]);
 
   // Apply Transform Helper
@@ -436,8 +451,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           window.addEventListener('deviceorientation', handleOrientation);
       }
     } else {
-        // Reset to center if not interacting
-        if (!isLowPowerMode && !isDraggingView.current) targetOffset.current = { x: 0, y: 0 };
+        // Reset to center if not interacting (Creation Mode)
+        if (!isDraggingView.current) targetOffset.current = { x: 0, y: 0 };
     }
 
     return () => {
@@ -536,8 +551,11 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             // Draw Layers with calculated offset
             const maxPx = (parallaxStrength / 100) * OVERSCAN_MARGIN;
             const direction = parallaxInverted ? -1 : 1;
+            
+            const scaleFactor = getScaleFactor();
 
-            [0, 1, 2, 3, 4].forEach(index => {
+            // Loop through all 7 layers
+            [0, 1, 2, 3, 4, 5, 6].forEach(index => {
                 const source = offscreenCanvases.current[index];
                 if (!source) return;
 
@@ -586,7 +604,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animationLoop);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange, layerBlurStrengths]); 
+  }, [parallaxStrength, focalLayerIndex, springConfig, parallaxInverted, isLowPowerMode, exportConfig, blurStrength, focusRange, layerBlurStrengths, getScaleFactor]); 
 
 
   // --- Interaction ---
@@ -627,6 +645,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const hitTest = (pt: Point, layerId: number) => {
       const pxPt = denormalizePoint(pt, dimensions.width, dimensions.height);
       const layerStrokes = strokes.filter(s => s.layerId === layerId).reverse();
+      const scaleFactor = getScaleFactor();
       
       for (const stroke of layerStrokes) {
           for (let i = 0; i < stroke.points.length - 1; i++) {
@@ -639,7 +658,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                const proj = { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y, 2) };
                const d = Math.sqrt(Math.pow(pxPt.x - proj.x, 2) + Math.pow(pxPt.y - proj.y, 2));
 
-               if (d < stroke.size + 5) return stroke;
+               // Scale hit tolerance to match visual scale
+               if (d < (stroke.size * scaleFactor) + 5) return stroke;
           }
       }
       return null;
@@ -651,8 +671,9 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
       if (exportConfig?.isActive) return;
 
-      // Always perform global color pick on right click
-      for (const layerId of [4, 3, 2, 1, 0]) {
+      // Always perform global color pick on right click (scan all 7 layers)
+      // Order from front (6) to back (0)
+      for (const layerId of [6, 5, 4, 3, 2, 1, 0]) {
           const pt = getNormalizedLocalPoint(e, layerId);
           const hitStroke = hitTest(pt, layerId);
           if (hitStroke && onColorPick) {
@@ -856,8 +877,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
              backgroundColor: backgroundColor 
         }}
     >
-       {/* 5 Layers of Offscreen Rendered Canvas, manipulated by CSS Transforms */}
-       {[0, 1, 2, 3, 4].map(layerIndex => {
+       {/* 7 Layers of Offscreen Rendered Canvas, manipulated by CSS Transforms */}
+       {[0, 1, 2, 3, 4, 5, 6].map(layerIndex => {
            let effectiveBlur = 0;
            // Handle Blur Logic: Negative focusRange = Uniform Blur
            const manualBlur = (layerBlurStrengths && layerBlurStrengths[layerIndex]) || 0;

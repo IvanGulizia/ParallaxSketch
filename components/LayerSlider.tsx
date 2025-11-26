@@ -7,8 +7,8 @@ interface LayerSliderProps {
 }
 
 export const LayerSlider: React.FC<LayerSliderProps> = ({ activeLayer, onChange }) => {
-  // Layers 0 (Back) to 4 (Front)
-  const layers = [4, 3, 2, 1, 0]; 
+  // Layers 0 (Back) to 6 (Front)
+  const layers = [6, 5, 4, 3, 2, 1, 0]; 
 
   return (
     <div 
@@ -17,7 +17,7 @@ export const LayerSlider: React.FC<LayerSliderProps> = ({ activeLayer, onChange 
       onTouchStart={(e) => e.stopPropagation()}
     >
       {/* The slider bar itself */}
-      <div className="w-full max-w-[2rem] h-80 bg-[var(--tool-bg)] rounded-full flex flex-col items-center justify-between py-6 border border-[var(--border-color)] relative">
+      <div className="w-full max-w-[2rem] h-96 bg-[var(--tool-bg)] rounded-full flex flex-col items-center justify-between py-6 border border-[var(--border-color)] relative">
         
         {layers.map((layerIndex) => (
           <button

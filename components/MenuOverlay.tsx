@@ -459,7 +459,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                 <ControlRow label="Focal Layer">
                      <div className="w-32">
                         <Slider 
-                            min={0} max={4} step={1}
+                            min={0} max={6} step={1}
                             value={focalLayerIndex} 
                             onChange={onFocalLayerChange}
                         />

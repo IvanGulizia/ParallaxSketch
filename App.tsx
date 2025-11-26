@@ -112,7 +112,7 @@ export default function App() {
 
   const [state, setState] = useState<AppState>({
     activeTool: ToolType.BRUSH,
-    activeLayer: 2, 
+    activeLayer: 3, // Default middle layer (0-6) is 3
     brushSize: 10,
     activeColorSlot: 0,
     activeSecondaryColorSlot: 1,
@@ -125,7 +125,7 @@ export default function App() {
     parallaxStrength: 10, 
     parallaxInverted: false,
     springConfig: { stiffness: 0.2, damping: 0.2 }, 
-    focalLayerIndex: 2, 
+    focalLayerIndex: 3, // Default focal point in middle of 7 layers
     isPlaying: false,
     useGyroscope: isMobile, 
     isLowPowerMode: true, 
@@ -147,8 +147,9 @@ export default function App() {
     focusRange: 0,
 
     globalLayerBlendMode: 'normal',
-    layerBlendModes: { 0: 'normal', 1: 'normal', 2: 'normal', 3: 'normal', 4: 'normal' },
-    layerBlurStrengths: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 },
+    // Initialized for 7 layers (0-6)
+    layerBlendModes: { 0: 'normal', 1: 'normal', 2: 'normal', 3: 'normal', 4: 'normal', 5: 'normal', 6: 'normal' },
+    layerBlurStrengths: { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
     uiTheme: {
         activeColor: "#566fa8",
         textColor: "#18284c",
@@ -293,7 +294,8 @@ export default function App() {
           if (Math.abs(e.deltaY) > 10) {
               setState(s => {
                   const dir = e.deltaY > 0 ? -1 : 1;
-                  const next = Math.max(0, Math.min(4, s.activeLayer + dir));
+                  // Updated to max 6
+                  const next = Math.max(0, Math.min(6, s.activeLayer + dir));
                   if (next === s.activeLayer) return s;
                   return { ...s, activeLayer: next };
               });
@@ -408,7 +410,8 @@ export default function App() {
           }
           if (e.key === 's' || e.key === 'ArrowDown') {
                // S/Down = Front (+1) -> Move CLOSER
-               setState(s => ({ ...s, focalLayerIndex: Math.min(4, s.focalLayerIndex + 1) }));
+               // Updated to max 6
+               setState(s => ({ ...s, focalLayerIndex: Math.min(6, s.focalLayerIndex + 1) }));
           }
 
           // Palette
@@ -557,7 +560,8 @@ export default function App() {
             },
             blurStrength: pBlur ? parseInt(pBlur) : 0,
             focusRange: pFocus ? parseFloat(pFocus) : 0,
-            focalLayerIndex: pFocalLayer ? parseInt(pFocalLayer) : 2,
+            // Default focal layer is 2 in embed URL if not specified, maybe update to 3 if new default? Keep 2 for compatibility or use new logic
+            focalLayerIndex: pFocalLayer ? parseInt(pFocalLayer) : 3, 
             isGridEnabled: pGrid === 'true',
             isSnappingEnabled: pSnap === 'true',
             gridSize: pGridSize ? parseInt(pGridSize) : 40,
@@ -775,7 +779,7 @@ export default function App() {
             className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? '' : ''}`}
             style={getContainerStyle()}
         >
-            <div className={`w-full h-full ${state.isEmbedMode ? 'rounded-none' : 'rounded-3xl border border-[var(--border-color)]'} overflow-hidden`}>
+            <div className="w-full h-full rounded-3xl border border-[var(--border-color)] overflow-hidden">
                 <DrawingCanvas 
                     activeTool={state.activeTool}
                     activeLayer={state.activeLayer}
