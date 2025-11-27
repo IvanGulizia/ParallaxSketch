@@ -404,22 +404,25 @@ export default function App() {
           }
 
           // Focal Layer (Inverted W/S as requested)
-          if (e.key === 'w' || e.key === 'ArrowUp') {
-              // W/Up = Back (-1) -> Move AWAY (deeper)
+          if (e.key === 'w') {
+              // W = Back (-1) -> Move AWAY (deeper)
               setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
           }
-          if (e.key === 's' || e.key === 'ArrowDown') {
-               // S/Down = Front (+1) -> Move CLOSER
+          if (e.key === 's') {
+               // S = Front (+1) -> Move CLOSER
                // Updated to max 6
                setState(s => ({ ...s, focalLayerIndex: Math.min(6, s.focalLayerIndex + 1) }));
           }
 
-          // Palette
-          if (e.key === 'd' || e.key === 'ArrowRight') handleCyclePalette(1); // Next
-          if (!state.isEmbedMode && (e.key === 'a' || e.key === 'ArrowLeft')) handleCyclePalette(-1); // Prev (Creation Mode)
-
           // Embed Specific
           if (state.isEmbedMode) {
+              // Embed Arrow keys also control Focal Layer if needed, or we can reserve them for something else
+              // Per user request: A/D for palette, Arrows maybe for something else?
+              // Let's map arrows to focal layer too for consistency in embed unless requested otherwise
+              if (e.key === 'ArrowUp') setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
+              if (e.key === 'ArrowDown') setState(s => ({ ...s, focalLayerIndex: Math.min(6, s.focalLayerIndex + 1) }));
+
+              if (e.key === 'd' || e.key === 'ArrowRight') handleCyclePalette(1); // Next
               if (e.key === 'a' || e.key === 'ArrowLeft') {
                   setState(s => ({ ...s, useGyroscope: !s.useGyroscope }));
               }
@@ -431,8 +434,15 @@ export default function App() {
               }
           }
 
-          // Creation Specific
+          // Creation Specific Shortcuts
           if (!state.isEmbedMode) {
+              if (e.key === 'd') handleCyclePalette(1);
+              if (e.key === 'a') handleCyclePalette(-1);
+
+              // Arrow Up/Down for Layer Selection (Not Focus)
+              if (e.key === 'ArrowUp') setState(s => ({ ...s, activeLayer: Math.min(6, s.activeLayer + 1) }));
+              if (e.key === 'ArrowDown') setState(s => ({ ...s, activeLayer: Math.max(0, s.activeLayer - 1) }));
+
               if (e.key === 'e') {
                   handleExport();
               }
@@ -513,7 +523,7 @@ export default function App() {
           window.removeEventListener('touchend', handleTouchEnd);
           window.removeEventListener('touchmove', handleTouchMove);
       };
-  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, state.isPlaying, state.useGyroscope]);
+  }, [state.isEmbedMode, state.palette, state.focalLayerIndex, state.blurStrength, state.isPlaying, state.useGyroscope, state.activeLayer]);
 
   useEffect(() => {
       if (state.isEmbedMode) {
@@ -544,6 +554,7 @@ export default function App() {
         const pGlobalBlend = params.get('globalBlend');
         const pStrokeColor = params.get('strokeColor');
         const pSymmetry = params.get('symmetry');
+        const pUi = params.get('ui');
 
         const defaultColorSlot = pStrokeColor ? -1 : (isMobileDevice ? 0 : -1);
 
@@ -574,6 +585,12 @@ export default function App() {
             activeColorSlot: defaultColorSlot,
             symmetryMode: (pSymmetry as SymmetryMode) || SymmetryMode.NONE
         }));
+        
+        // Hide UI if ui=false param
+        if (pUi === 'false') {
+            // We don't have a specific state for suppressing all UI, but we can assume minimal
+            // The shortcuts overlay is hidden by default anyway
+        }
 
         const externalUrl = params.get('url');
         if (externalUrl) {
@@ -719,9 +736,16 @@ export default function App() {
       return baseStyle;
   };
 
+  // Main background logic: transparent for transparent embed, WHITE for regular embed, theme color for app
+  const getMainBackgroundClass = () => {
+      if (state.isTransparentEmbed) return '';
+      if (state.isEmbedMode) return 'bg-white';
+      return 'bg-[var(--secondary-bg)]';
+  };
+
   return (
     <main 
-        className={`relative w-screen h-screen flex flex-col overflow-hidden transition-colors duration-300 ${state.isTransparentEmbed ? '' : 'bg-[var(--secondary-bg)]'}`}
+        className={`relative w-screen h-screen flex flex-col overflow-hidden transition-colors duration-300 ${getMainBackgroundClass()}`}
         style={{ backgroundColor: state.isTransparentEmbed ? 'transparent' : undefined }}
     >
       {state.isEmbedMode && showEmbedShortcuts && (
@@ -779,7 +803,7 @@ export default function App() {
             className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? '' : ''}`}
             style={getContainerStyle()}
         >
-            <div className="w-full h-full rounded-3xl border border-[var(--border-color)] overflow-hidden">
+            <div className={`w-full h-full rounded-3xl border border-[var(--border-color)] overflow-hidden ${state.isEmbedMode ? 'rounded-3xl border-0' : ''}`}>
                 <DrawingCanvas 
                     activeTool={state.activeTool}
                     activeLayer={state.activeLayer}
