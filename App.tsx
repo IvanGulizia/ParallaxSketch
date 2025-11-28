@@ -555,6 +555,11 @@ export default function App() {
         const pStrokeColor = params.get('strokeColor');
         const pSymmetry = params.get('symmetry');
         const pUi = params.get('ui');
+        
+        // Embed Styling
+        const pRadius = params.get('borderRadius');
+        const pBorderW = params.get('borderWidth');
+        const pBorderC = params.get('borderColor');
 
         const defaultColorSlot = pStrokeColor ? -1 : (isMobileDevice ? 0 : -1);
 
@@ -571,7 +576,6 @@ export default function App() {
             },
             blurStrength: pBlur ? parseInt(pBlur) : 0,
             focusRange: pFocus ? parseFloat(pFocus) : 0,
-            // Default focal layer is 2 in embed URL if not specified, maybe update to 3 if new default? Keep 2 for compatibility or use new logic
             focalLayerIndex: pFocalLayer ? parseInt(pFocalLayer) : 3, 
             isGridEnabled: pGrid === 'true',
             isSnappingEnabled: pSnap === 'true',
@@ -583,7 +587,12 @@ export default function App() {
             useGyroscope: isMobileDevice, 
             isLowPowerMode: true,
             activeColorSlot: defaultColorSlot,
-            symmetryMode: (pSymmetry as SymmetryMode) || SymmetryMode.NONE
+            symmetryMode: (pSymmetry as SymmetryMode) || SymmetryMode.NONE,
+            embedStyle: {
+                borderRadius: pRadius ? parseInt(pRadius) : 0,
+                borderWidth: pBorderW ? parseInt(pBorderW) : 0,
+                borderColor: pBorderC ? '#' + pBorderC : '#000000'
+            }
         }));
         
         // Hide UI if ui=false param
@@ -595,10 +604,20 @@ export default function App() {
         const externalUrl = params.get('url');
         if (externalUrl) {
             const decodedUrl = decodeURIComponent(externalUrl);
-            fetch(decodedUrl)
+            fetch(decodedUrl, { referrerPolicy: 'no-referrer', credentials: 'omit' })
                 .then(res => { if (!res.ok) throw new Error("Failed"); return res.json(); })
                 .then(data => loadData(data, isTransparent))
                 .catch(err => console.error("Ext error", err));
+            return;
+        }
+        
+        // Vercel KV ID Loading
+        const vercelId = params.get('vercelId');
+        if (vercelId) {
+            fetch(`/api/load?id=${vercelId}`)
+                .then(res => { if (!res.ok) throw new Error("Failed"); return res.json(); })
+                .then(data => loadData(data, isTransparent))
+                .catch(err => console.error("Vercel Load Error", err));
             return;
         }
 
@@ -712,16 +731,27 @@ export default function App() {
       // In embed mode, if aspect ratio is defined, align center.
       // Use margins to center.
       if (state.isEmbedMode) {
+          const style: React.CSSProperties = {
+              maxHeight: '100%', 
+              maxWidth: '100%',
+              margin: 'auto'
+          };
           if (state.aspectRatio) {
-              return { 
-                  aspectRatio: `${state.aspectRatio}/1`, 
-                  maxHeight: '100%', 
-                  maxWidth: '100%',
-                  margin: 'auto'
-              };
+              style.aspectRatio = `${state.aspectRatio}/1`;
+          }
+          if (state.embedStyle) {
+              if (state.embedStyle.borderRadius > 0) style.borderRadius = `${state.embedStyle.borderRadius}px`;
+              if (state.embedStyle.borderWidth > 0) {
+                  style.border = `${state.embedStyle.borderWidth}px solid ${state.embedStyle.borderColor}`;
+                  style.boxSizing = 'border-box';
+              }
           }
           // Full width/height for responsive if no aspect ratio locked
-          return { width: '100%', height: '100%' };
+          if (!state.aspectRatio) {
+              style.width = '100%';
+              style.height = '100%';
+          }
+          return style;
       }
 
       const baseStyle: React.CSSProperties = {};
@@ -746,7 +776,7 @@ export default function App() {
   return (
     <main 
         className={`relative w-screen h-screen flex flex-col overflow-hidden transition-colors duration-300 ${getMainBackgroundClass()}`}
-        style={{ backgroundColor: state.isTransparentEmbed ? 'transparent' : undefined }}
+        style={{ backgroundColor: state.isEmbedMode && !state.isTransparentEmbed ? '#FFFFFF' : (state.isTransparentEmbed ? 'transparent' : undefined) }}
     >
       {state.isEmbedMode && showEmbedShortcuts && (
           <ShortcutsOverlay onClose={() => setShowEmbedShortcuts(false)} isEmbed={true} />
@@ -803,7 +833,7 @@ export default function App() {
             className={`relative transition-all duration-300 ease-in-out ${state.isEmbedMode ? '' : ''}`}
             style={getContainerStyle()}
         >
-            <div className={`w-full h-full rounded-3xl border border-[var(--border-color)] overflow-hidden ${state.isEmbedMode ? 'rounded-3xl border-0' : ''}`}>
+            <div className={`w-full h-full rounded-3xl border border-[var(--border-color)] overflow-hidden ${state.isEmbedMode ? 'rounded-none border-0' : ''}`}>
                 <DrawingCanvas 
                     activeTool={state.activeTool}
                     activeLayer={state.activeLayer}

@@ -80,6 +80,12 @@ export interface ExportConfig {
   format: ExportFormat;
 }
 
+export interface EmbedStyle {
+  borderRadius: number;
+  borderWidth: number;
+  borderColor: string;
+}
+
 export interface AppState {
   activeTool: ToolType;
   activeLayer: number; // 0 to 4
@@ -122,6 +128,7 @@ export interface AppState {
   uiTheme: UITheme; 
   isEmbedMode: boolean;
   isTransparentEmbed: boolean; // New: for transparent background embeds
+  embedStyle?: EmbedStyle; // Visual style for embed container
 
   // Export
   exportConfig: ExportConfig;

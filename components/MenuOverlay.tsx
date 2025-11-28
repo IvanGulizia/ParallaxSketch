@@ -159,15 +159,14 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
 }) => {
   const [showShare, setShowShare] = useState(false);
   const [shareTransparent, setShareTransparent] = useState(false);
-  const [showUIHint, setShowUIHint] = useState(true); // Control UI param in embed
+  const [showUIHint, setShowUIHint] = useState(true); 
   const [showExportStudio, setShowExportStudio] = useState(false);
   const [externalUrlInput, setExternalUrlInput] = useState('');
-  const [generatedExternalLink, setGeneratedExternalLink] = useState('');
   
-  // Test Hosting State
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [autoHostLink, setAutoHostLink] = useState('');
+  // Embed Styling State
+  const [embedBorderRadius, setEmbedBorderRadius] = useState(12);
+  const [embedBorderWidth, setEmbedBorderWidth] = useState(0);
+  const [embedBorderColor, setEmbedBorderColor] = useState('#000000');
 
   const menuRef = useRef<HTMLDivElement>(null);
   const shareSectionRef = useRef<HTMLDivElement>(null);
@@ -213,7 +212,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       const origin = window.location.origin === 'null' ? 'https://parallax-sketch.vercel.app' : window.location.origin;
       const url = new URL(origin + window.location.pathname);
       url.searchParams.set('mode', 'embed');
-      url.searchParams.set('url', sourceUrl);
+      if (sourceUrl) url.searchParams.set('url', sourceUrl);
       
       // Visuals
       url.searchParams.set('strength', parallaxStrength.toString());
@@ -245,59 +244,42 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
       if (shareTransparent) url.searchParams.set('bg', 'transparent');
       else url.searchParams.set('bg', backgroundColor.replace('#', ''));
       
+      // Embed Frame Styling
+      if (embedBorderRadius > 0) url.searchParams.set('borderRadius', embedBorderRadius.toString());
+      if (embedBorderWidth > 0) {
+          url.searchParams.set('borderWidth', embedBorderWidth.toString());
+          url.searchParams.set('borderColor', embedBorderColor.replace('#', ''));
+      }
+      
       return url.toString();
   };
 
-  const generateExternalLink = () => {
-      if (!externalUrlInput) return;
-      let finalUrl = externalUrlInput;
+  const processExternalLink = (raw: string) => {
+      let finalUrl = raw;
       if (finalUrl.includes('gist.github.com') && !finalUrl.includes('raw')) {
          finalUrl = finalUrl.replace('gist.github.com', 'gist.githubusercontent.com') + '/raw';
       }
-      setGeneratedExternalLink(buildEmbedUrl(finalUrl));
+      return finalUrl;
   };
 
-  const handleAutoUpload = async () => {
-      setIsUploading(true);
-      setUploadError(null);
-      setAutoHostLink('');
+  const handleCopyToClipboard = () => {
+      const rawData = getEncodedState();
+      navigator.clipboard.writeText(rawData).then(() => {
+          alert("Data Copied! Paste this into a new GitHub Gist file.");
+      });
+  };
 
-      try {
-          // 1. Get Data
-          const rawData = getEncodedState();
-          // Re-parse to send as pure JSON object, not stringified string
-          const jsonData = JSON.parse(rawData);
+  const copyDirectLink = () => {
+      if (!externalUrlInput) return alert("Paste Gist Link First");
+      const url = buildEmbedUrl(processExternalLink(externalUrlInput));
+      navigator.clipboard.writeText(url).then(() => alert("Direct Link Copied!"));
+  };
 
-          // 2. Post to JSONBlob (Anonymous Hosting)
-          const response = await fetch('https://jsonblob.com/api/jsonBlob', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json',
-              },
-              body: JSON.stringify(jsonData)
-          });
-
-          if (!response.ok) {
-              throw new Error(`Upload failed: ${response.statusText}`);
-          }
-
-          // 3. Get Location
-          const location = response.headers.get('Location');
-          if (!location) {
-              throw new Error("No location returned from host.");
-          }
-
-          // 4. Generate Link
-          const embedCode = buildEmbedUrl(location);
-          setAutoHostLink(embedCode);
-
-      } catch (err) {
-          console.error(err);
-          setUploadError("Upload failed. Adblockers or CORS might be blocking the request.");
-      } finally {
-          setIsUploading(false);
-      }
+  const copyEmbedCode = () => {
+      if (!externalUrlInput) return alert("Paste Gist Link First");
+      const url = buildEmbedUrl(processExternalLink(externalUrlInput));
+      const code = `<iframe src="${url}" width="100%" height="600" style="border:none; border-radius:${embedBorderRadius}px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`;
+      navigator.clipboard.writeText(code).then(() => alert("Embed Code Copied!"));
   };
 
   if (!isOpen) return null;
@@ -578,7 +560,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     }`}
                  >
                     <Icons.Link size={20} className={`mb-1 ${showShare ? 'text-white' : 'text-[var(--icon-color)] group-hover:text-[var(--active-color)]'}`} />
-                    <span className={`text-[10px] font-medium ${showShare ? 'text-white' : 'text-[var(--text-color)]'}`}>Share Link</span>
+                    <span className={`text-[10px] font-medium ${showShare ? 'text-white' : 'text-[var(--text-color)]'}`}>Host & Share</span>
                  </button>
 
                  <button 
@@ -684,10 +666,11 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
             )}
             
             {showShare && (
-                 <div ref={shareSectionRef} className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-4">
+                 <div ref={shareSectionRef} className="mt-3 p-4 bg-[var(--tool-bg)] rounded-xl border border-[var(--border-color)] animate-in fade-in space-y-6">
                     
+                    {/* General Options */}
                     <div className="space-y-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Options</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Embed Options</span>
                         <div className="flex items-center gap-4">
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" checked={shareTransparent} onChange={(e) => setShareTransparent(e.target.checked)} />
@@ -701,87 +684,117 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
                     </div>
 
                     <Separator />
-                    
-                    <div className="space-y-3 p-3 bg-[var(--secondary-bg)] rounded-lg border border-[var(--border-color)] animate-in fade-in">
-                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Embed from External Link</span>
-                        <span className="text-[9px] text-[var(--secondary-text)] block">
-                            Paste your JSON URL (e.g. GitHub Gist or Raw file) below.
-                        </span>
-                        <input 
-                            type="text" 
-                            placeholder="https://gist.github.com/..."
-                            value={externalUrlInput}
-                            onChange={(e) => setExternalUrlInput(e.target.value)}
-                            className="w-full text-[10px] p-2 rounded border border-[var(--border-color)] focus:outline-none focus:border-[var(--active-color)]"
-                        />
-                        <button 
-                            onClick={generateExternalLink}
-                            disabled={!externalUrlInput}
-                            className="w-full py-2 bg-[var(--active-color)] text-white rounded text-[10px] font-medium hover:opacity-90 transition-opacity"
-                        >
-                            Generate Embed Code
-                        </button>
-                        {generatedExternalLink && (
-                            <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1">
-                                <textarea 
-                                    readOnly
-                                    onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                                    className="w-full h-24 text-[9px] font-mono bg-white border border-[var(--border-color)] rounded p-2 resize-none focus:outline-none"
-                                    value={`<iframe src="${generatedExternalLink}" width="100%" height="600" style="border:none; border-radius:12px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`}
+
+                    {/* Host & Share Workflow */}
+                    <div className="space-y-4">
+                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Host & Share (Reliable)</span>
+                        <p className="text-[10px] text-[var(--secondary-text)] leading-tight">
+                            Since this is a serverless app, hosting is manual but 100% free and reliable.
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={handleCopyToClipboard}
+                                className="flex-1 py-2 rounded-lg text-[10px] font-semibold border bg-[var(--button-bg)] text-[var(--text-color)] border-[var(--button-border)] hover:bg-[var(--secondary-bg)]"
+                            >
+                                1. Copy Data
+                            </button>
+                            <a 
+                                href="https://gist.github.com/" target="_blank" rel="noreferrer"
+                                className="flex-1 py-2 rounded-lg text-[10px] font-semibold border bg-[var(--button-bg)] text-[var(--text-color)] border-[var(--button-border)] hover:bg-[var(--secondary-bg)] text-center flex items-center justify-center"
+                            >
+                                2. Open Gist
+                            </a>
+                        </div>
+
+                        <div className="space-y-1">
+                            <span className="text-[9px] font-bold text-[var(--text-color)]">3. Paste your Gist Link</span>
+                            <input 
+                                type="text" 
+                                placeholder="https://gist.github.com/username/..."
+                                value={externalUrlInput}
+                                onChange={(e) => setExternalUrlInput(e.target.value)}
+                                className="w-full text-[10px] p-2 rounded border border-[var(--border-color)] focus:outline-none focus:border-[var(--active-color)] bg-[var(--button-bg)]"
+                            />
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Embed Styling (Border/Radius) */}
+                    <div className="space-y-4">
+                        <span className="text-[10px] font-bold uppercase tracking-wide opacity-50 block">Embed Styling</span>
+                        
+                        <ControlRow label="Border Radius">
+                            <div className="w-24 flex items-center gap-2">
+                                <span className="text-[9px] text-gray-400 w-4 text-right">{embedBorderRadius}</span>
+                                <Slider 
+                                    min={0} max={50} step={1}
+                                    value={embedBorderRadius} 
+                                    onChange={setEmbedBorderRadius}
                                 />
-                                <p className="text-[9px] text-green-600 font-medium text-center">
-                                    Code generated! Copy and paste into your site.
-                                </p>
                             </div>
+                        </ControlRow>
+
+                        <ControlRow label="Border Width">
+                            <div className="w-24 flex items-center gap-2">
+                                <span className="text-[9px] text-gray-400 w-4 text-right">{embedBorderWidth}</span>
+                                <Slider 
+                                    min={0} max={20} step={1}
+                                    value={embedBorderWidth} 
+                                    onChange={setEmbedBorderWidth}
+                                />
+                            </div>
+                        </ControlRow>
+
+                        {embedBorderWidth > 0 && (
+                            <ControlRow label="Border Color">
+                                <div className="flex items-center gap-2 px-1 py-1 bg-[var(--secondary-bg)] rounded-lg border border-[var(--button-border)] w-fit">
+                                    <div className="relative w-5 h-5 flex items-center justify-center cursor-pointer rounded overflow-hidden shadow-sm border border-[var(--border-color)]">
+                                        <div 
+                                            className="absolute inset-0"
+                                            style={{ backgroundColor: embedBorderColor }}
+                                        />
+                                        <input 
+                                            type="color" 
+                                            value={embedBorderColor}
+                                            onChange={(e) => setEmbedBorderColor(e.target.value)}
+                                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                        />
+                                    </div>
+                                </div>
+                            </ControlRow>
                         )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-2 pt-2">
+                        <button 
+                            onClick={copyDirectLink}
+                            disabled={!externalUrlInput}
+                            className={`w-full py-2.5 rounded-lg text-xs font-semibold border transition-all ${
+                                !externalUrlInput 
+                                ? 'bg-[var(--button-bg)] text-[var(--disabled-color)]' 
+                                : 'bg-[var(--button-bg)] text-[var(--active-color)] border-[var(--active-color)] hover:bg-[var(--secondary-bg)]'
+                            }`}
+                        >
+                            Copy Direct Link
+                        </button>
+                        <button 
+                            onClick={copyEmbedCode}
+                            disabled={!externalUrlInput}
+                            className={`w-full py-2.5 rounded-lg text-xs font-semibold border transition-all ${
+                                !externalUrlInput 
+                                ? 'bg-[var(--button-bg)] text-[var(--disabled-color)]' 
+                                : 'bg-[var(--active-color)] text-white border-[var(--active-color)] hover:opacity-90'
+                            }`}
+                        >
+                            Copy Embed Code
+                        </button>
                     </div>
 
                 </div>
             )}
-        </div>
-
-        {/* Experimental Hosting Test Section */}
-        <div>
-            <SectionTitle>Experimental Hosting</SectionTitle>
-            <div className="bg-[var(--tool-bg)] p-4 rounded-2xl border border-[var(--border-color)] space-y-4">
-                <p className="text-[10px] text-[var(--secondary-text)] leading-relaxed">
-                    This feature attempts to upload your sketch to a public cloud service (JSONBlob) automatically to generate a sharable link without manual file hosting. 
-                    <br/><span className="font-bold text-red-400">Note: Adblockers or Firewalls may block this request.</span>
-                </p>
-                
-                <button 
-                    onClick={handleAutoUpload}
-                    disabled={isUploading}
-                    className={`w-full py-2.5 rounded-lg text-xs font-semibold border transition-all ${
-                        isUploading
-                        ? 'bg-[var(--button-bg)] text-[var(--disabled-color)] cursor-wait'
-                        : 'bg-[var(--active-color)] text-white border-[var(--active-color)] hover:opacity-90'
-                    }`}
-                >
-                    {isUploading ? 'Uploading to Cloud...' : 'Upload to Public Cloud (Beta)'}
-                </button>
-
-                {uploadError && (
-                    <p className="text-[10px] text-red-500 font-medium text-center animate-in fade-in">
-                        {uploadError}
-                    </p>
-                )}
-
-                {autoHostLink && (
-                    <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1">
-                        <span className="text-[10px] font-bold text-[var(--text-color)] block">Your Auto-Generated Embed Code:</span>
-                        <textarea 
-                            readOnly
-                            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                            className="w-full h-24 text-[9px] font-mono bg-white border border-[var(--border-color)] rounded p-2 resize-none focus:outline-none"
-                            value={`<iframe src="${autoHostLink}" width="100%" height="600" style="border:none; border-radius:12px; overflow:hidden;" allow="accelerometer; gyroscope;"></iframe>`}
-                        />
-                        <p className="text-[9px] text-green-600 font-medium text-center">
-                            Success! The JSON is hosted automatically.
-                        </p>
-                    </div>
-                )}
-            </div>
         </div>
 
       </div>
