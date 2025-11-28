@@ -107,6 +107,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       : 'bg-[var(--tool-bg)] text-[var(--icon-color)] border-[var(--button-border)] hover:bg-[var(--secondary-bg)]'}
   `;
 
+  // Increased width to w-80 to fit 7 colors comfortably
   const popupClass = "absolute top-full mt-4 left-1/2 -translate-x-1/2 backdrop-blur-md bg-white/95 flex gap-3 z-50 animate-in fade-in slide-in-from-top-2 duration-200 items-center justify-center border border-gray-200 shadow-lg";
 
   return (
@@ -141,7 +142,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
             
             {showColorPicker && (
-                <div className={`${popupClass} rounded-3xl p-4 flex-col gap-3 w-72`}>
+                <div className={`${popupClass} rounded-3xl p-4 flex-col gap-3 w-80`}>
                     
                     {/* Tabs */}
                     <div className="flex bg-gray-100 rounded-full p-1 w-full mb-1">

@@ -255,7 +255,7 @@ export const MenuOverlay: React.FC<MenuOverlayProps> = ({
   };
 
   const processExternalLink = (raw: string) => {
-      let finalUrl = raw;
+      let finalUrl = raw.trim();
       if (finalUrl.includes('gist.github.com') && !finalUrl.includes('raw')) {
          finalUrl = finalUrl.replace('gist.github.com', 'gist.githubusercontent.com') + '/raw';
       }

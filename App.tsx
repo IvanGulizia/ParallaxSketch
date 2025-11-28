@@ -10,28 +10,28 @@ import { v4 as uuidv4 } from 'uuid';
 import LZString from 'lz-string';
 import { Icons } from './components/Icons';
 
-// Extended Harmonious Palettes
+// Extended Harmonious Palettes (7 colors)
 const PRESET_PALETTES = [
-    ['#E0BBE4', '#957DAD', '#D291BC', '#FEC8D8', '#FFDFD3'], // Pastel Sunset
-    ['#F4F1DE', '#E07A5F', '#3D405B', '#81B29A', '#F2CC8F'], // Terra
-    ['#CCD5AE', '#E9EDC9', '#FEFAE0', '#FAEDCD', '#D4A373'], // Nature
-    ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51'], // Vivid
-    ['#4A4A4A', '#8C8C80', '#D8D4C5', '#EFEDE6', '#FDFCF8'], // Monochrome
-    ['#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff'], // Rainbow Pastel
-    ['#a0c4ff', '#bdb2ff', '#ffc6ff', '#fffffc', '#d4d4d4'], // Soft Cool
-    ['#003049', '#d62828', '#f77f00', '#fcbf49', '#eae2b7'], // Retro Pop
-    ['#606c38', '#283618', '#fefae0', '#dda15e', '#bc6c25'], // Earthy Green
-    ['#2b2d42', '#8d99ae', '#edf2f4', '#ef233c', '#d90429'], // Americano
-    ['#fff100', '#ff8c00', '#e81123', '#ec008c', '#68217a'], // CMYK Vibes
-    ['#dad7cd', '#a3b18a', '#588157', '#3a5a40', '#344e41'], // Forest
-    ['#000000', '#14213d', '#fca311', '#e5e5e5', '#ffffff'], // High Contrast
-    ['#cdb4db', '#ffc8dd', '#ffafcc', '#bde0fe', '#a2d2ff'], // Cotton Candy
-    ['#7400b8', '#6930c3', '#5e60ce', '#5390d9', '#4ea8de'], // Deep Purple Blue
-    ['#e63946', '#f1faee', '#a8dadc', '#457b9d', '#1d3557'], // Americana
-    ['#f8f9fa', '#e9ecef', '#dee2e6', '#ced4da', '#adb5bd'], // Grays
-    ['#ffe5ec', '#ffc2d1', '#ffb3c6', '#ff8fab', '#fb6f92'], // Pink Love
-    ['#d8e2dc', '#ffe5d9', '#ffcad4', '#f4acb7', '#9d8189'], // Muted Rose
-    ['#03045e', '#023e8a', '#0077b6', '#0096c7', '#00b4d8']  // Ocean
+    ['#E0BBE4', '#957DAD', '#D291BC', '#FEC8D8', '#FFDFD3', '#D6E2E9', '#F1E3D3'], // Pastel Sunset
+    ['#F4F1DE', '#E07A5F', '#3D405B', '#81B29A', '#F2CC8F', '#9F86C0', '#5E548E'], // Terra Extended
+    ['#CCD5AE', '#E9EDC9', '#FEFAE0', '#FAEDCD', '#D4A373', '#A3B18A', '#588157'], // Nature
+    ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51', '#2B9348', '#8338EC'], // Vivid
+    ['#4A4A4A', '#8C8C80', '#D8D4C5', '#EFEDE6', '#FDFCF8', '#2F3E46', '#CAD2C5'], // Monochrome
+    ['#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff'], // Rainbow Pastel
+    ['#a0c4ff', '#bdb2ff', '#ffc6ff', '#fffffc', '#d4d4d4', '#e2e2df', '#d2d2cf'], // Soft Cool
+    ['#003049', '#d62828', '#f77f00', '#fcbf49', '#eae2b7', '#669bbc', '#006d77'], // Retro Pop
+    ['#606c38', '#283618', '#fefae0', '#dda15e', '#bc6c25', '#a3b18a', '#588157'], // Earthy Green
+    ['#2b2d42', '#8d99ae', '#edf2f4', '#ef233c', '#d90429', '#023047', '#ffb703'], // Americano
+    ['#fff100', '#ff8c00', '#e81123', '#ec008c', '#68217a', '#00188f', '#00bcf2'], // CMYK Vibes
+    ['#dad7cd', '#a3b18a', '#588157', '#3a5a40', '#344e41', '#3a0ca3', '#4361ee'], // Forest
+    ['#000000', '#14213d', '#fca311', '#e5e5e5', '#ffffff', '#e0e1dd', '#778da9'], // High Contrast
+    ['#cdb4db', '#ffc8dd', '#ffafcc', '#bde0fe', '#a2d2ff', '#8d99ae', '#2b2d42'], // Cotton Candy
+    ['#7400b8', '#6930c3', '#5e60ce', '#5390d9', '#4ea8de', '#48bfe3', '#56cfe1'], // Deep Purple Blue
+    ['#e63946', '#f1faee', '#a8dadc', '#457b9d', '#1d3557', '#457b9d', '#a8dadc'], // Americana
+    ['#f8f9fa', '#e9ecef', '#dee2e6', '#ced4da', '#adb5bd', '#6c757d', '#495057'], // Grays
+    ['#ffe5ec', '#ffc2d1', '#ffb3c6', '#ff8fab', '#fb6f92', '#ff006e', '#8338ec'], // Pink Love
+    ['#d8e2dc', '#ffe5d9', '#ffcad4', '#f4acb7', '#9d8189', '#f2e9e4', '#c9ada7'], // Muted Rose
+    ['#03045e', '#023e8a', '#0077b6', '#0096c7', '#00b4d8', '#48bfe3', '#90e0ef']  // Ocean
 ];
 
 // Helper Component for Shortcuts Overlay
@@ -62,8 +62,8 @@ const ShortcutsOverlay = ({ onClose, isEmbed }: { onClose: () => void, isEmbed: 
                 )}
                 {!isEmbed && (
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                        <span>Select Color (1-5)</span>
-                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">1</kbd>...<kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">5</kbd></div>
+                        <span>Select Color (1-7)</span>
+                        <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">1</kbd>...<kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">7</kbd></div>
                     </div>
                 )}
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
@@ -89,12 +89,12 @@ const ShortcutsOverlay = ({ onClose, isEmbed }: { onClose: () => void, isEmbed: 
                     </div>
                 )}
                  <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Focus Layer (Back)</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> {isEmbed && <span>or <span className="text-xs italic">Swipe Up</span></span>}</div>
+                    <span>Focus Layer</span>
+                    <div className="flex gap-1"><Icons.ArrowUp size={12}/> / <Icons.ArrowDown size={12}/></div>
                 </div>
                  <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                    <span>Focus Layer (Front)</span>
-                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd> {isEmbed && <span>or <span className="text-xs italic">Swipe Down</span></span>}</div>
+                    <span>Active Layer</span>
+                    <div className="flex gap-1"><kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">W</kbd> / <kbd className="px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono text-xs">S</kbd></div>
                 </div>
                 <div className="flex justify-between items-center">
                     <span>Depth of Field</span>
@@ -403,22 +403,19 @@ export default function App() {
               handleTogglePlay();
           }
 
-          // Focal Layer (Inverted W/S as requested)
+          // SWAPPED W/S Logic based on user request:
+          // W now increases Active Layer (Front)
           if (e.key === 'w') {
-              // W = Back (-1) -> Move AWAY (deeper)
-              setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
+              setState(s => ({ ...s, activeLayer: Math.min(6, s.activeLayer + 1) }));
           }
+          // S now decreases Active Layer (Back)
           if (e.key === 's') {
-               // S = Front (+1) -> Move CLOSER
-               // Updated to max 6
-               setState(s => ({ ...s, focalLayerIndex: Math.min(6, s.focalLayerIndex + 1) }));
+               setState(s => ({ ...s, activeLayer: Math.max(0, s.activeLayer - 1) }));
           }
 
           // Embed Specific
           if (state.isEmbedMode) {
-              // Embed Arrow keys also control Focal Layer if needed, or we can reserve them for something else
-              // Per user request: A/D for palette, Arrows maybe for something else?
-              // Let's map arrows to focal layer too for consistency in embed unless requested otherwise
+              // Map arrows to focal layer in embed (matches creation logic below)
               if (e.key === 'ArrowUp') setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
               if (e.key === 'ArrowDown') setState(s => ({ ...s, focalLayerIndex: Math.min(6, s.focalLayerIndex + 1) }));
 
@@ -439,9 +436,11 @@ export default function App() {
               if (e.key === 'd') handleCyclePalette(1);
               if (e.key === 'a') handleCyclePalette(-1);
 
-              // Arrow Up/Down for Layer Selection (Not Focus)
-              if (e.key === 'ArrowUp') setState(s => ({ ...s, activeLayer: Math.min(6, s.activeLayer + 1) }));
-              if (e.key === 'ArrowDown') setState(s => ({ ...s, activeLayer: Math.max(0, s.activeLayer - 1) }));
+              // SWAPPED Arrow Up/Down Logic:
+              // Arrow Up now controls Focal Layer (Back/Away) - Matches previous 'W' logic
+              if (e.key === 'ArrowUp') setState(s => ({ ...s, focalLayerIndex: Math.max(0, s.focalLayerIndex - 1) }));
+              // Arrow Down now controls Focal Layer (Front/Closer) - Matches previous 'S' logic
+              if (e.key === 'ArrowDown') setState(s => ({ ...s, focalLayerIndex: Math.min(6, s.focalLayerIndex + 1) }));
 
               if (e.key === 'e') {
                   handleExport();
@@ -449,7 +448,7 @@ export default function App() {
               if (e.key === 'r') {
                   handleReset();
               }
-              if (['1','2','3','4','5'].includes(e.key)) {
+              if (['1','2','3','4','5','6','7'].includes(e.key)) {
                   const index = parseInt(e.key) - 1;
                   handleColorPick(index);
               }
@@ -604,7 +603,7 @@ export default function App() {
         const externalUrl = params.get('url');
         if (externalUrl) {
             const decodedUrl = decodeURIComponent(externalUrl);
-            fetch(decodedUrl, { referrerPolicy: 'no-referrer', credentials: 'omit' })
+            fetch(decodedUrl)
                 .then(res => { if (!res.ok) throw new Error("Failed"); return res.json(); })
                 .then(data => loadData(data, isTransparent))
                 .catch(err => console.error("Ext error", err));
